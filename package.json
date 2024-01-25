@@ -1,6 +1,6 @@
 {
   "name": "typizator-handler",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.4",
   "description": "Handler converting JSON events to strict types for AWS lambdas and similar applications",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
@@ -27,7 +27,7 @@
   "license": "ISC",
   "dependencies": {
     "json-bigint": "^1.0.0",
-    "typizator": "^1.0.0-beta.17"
+    "typizator": "^1.0.0-beta.21"
   },
   "devDependencies": {
     "@types/jest": "^29.5.11",
