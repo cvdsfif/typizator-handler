@@ -7,7 +7,7 @@ export type HandlerEvent = { body: string };
 export type HandlerResponse = {
     data?: string,
     errorMessage?: string
-}
+} | string;
 
 export const describeJsonSchema = (schema: Schema<any, any, any>) => {
     return schema.metadata.dataType === "object" ?
@@ -58,9 +58,9 @@ export const handlerImpl = <T extends FunctionCallDefinition>(
             .catch(e => {
                 console.error(`Error caught: ${e.message ?? e}`);
                 console.error(e.stack);
-                return {
+                return JSONBig.stringify({
                     errorMessage: `Handler error: ${e.message ?? e}`
-                };
+                });
             });
     };
 }
