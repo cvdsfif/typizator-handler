@@ -5,8 +5,7 @@ export const PING = "@@ping";
 export type HandlerEvent = { body: string };
 
 export type HandlerResponse = {
-    data?: string,
-    errorMessage?: string
+    data: string
 } | string;
 
 export const describeJsonSchema = (schema: Schema<any, any, any>) => {

@@ -67,19 +67,19 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
     });
 
     test("Should correctly treat errors", async () => {
-        expect(await errorGeneratorHandler({ body: `["mandatory","nullable","optional"]` }))
+        expect(JSON.parse(await errorGeneratorHandler({ body: `["mandatory","nullable","optional"]` }) as string))
             .toEqual({ errorMessage: `Handler error: Custom error` });
-        expect(await errorGeneratorHandler({ body: `["mandatory","nullable"]` }))
+        expect(JSON.parse(await errorGeneratorHandler({ body: `["mandatory","nullable"]` }) as string))
             .toEqual({ errorMessage: `Handler error: Custom error` });
-        expect((await errorGeneratorHandler({ body: `[null]` })).errorMessage)
+        expect(JSON.parse((await errorGeneratorHandler({ body: `[null]` }) as string)).errorMessage)
             .toMatch(/is null/);
-        expect((await errorGeneratorHandler({ body: `["mandatory"]` })).errorMessage)
+        expect(JSON.parse((await errorGeneratorHandler({ body: `["mandatory"]` }) as string)).errorMessage)
             .toMatch(/is undefined/);
-        expect((await errorGeneratorHandler({ body: `[]` })).errorMessage)
+        expect(JSON.parse((await errorGeneratorHandler({ body: `[]` }) as string)).errorMessage)
             .toMatch(/is undefined/);
-        expect((await errorGeneratorHandler({ body: `{}` })).errorMessage)
+        expect(JSON.parse((await errorGeneratorHandler({ body: `{}` }) as string)).errorMessage)
             .toMatch(/must be an array/);
-        expect((await errorGeneratorHandler({ body: `Wrong body` })).errorMessage)
+        expect(JSON.parse((await errorGeneratorHandler({ body: `Wrong body` }) as string)).errorMessage)
             .toMatch(/Unexpected/);
     });
 });
