@@ -9,7 +9,7 @@ export type HandlerResponse = {
     errorMessage?: string
 }
 
-const describeJsonSchema = (schema: Schema<any, any, any>) => {
+export const describeJsonSchema = (schema: Schema<any, any, any>) => {
     return schema.metadata.dataType === "object" ?
         `{${Array.from((schema.metadata as ObjectMetadata).fields).map(
             ([key, value]): string => `"${key}":${describeJsonSchema(value)}`
@@ -19,8 +19,10 @@ const describeJsonSchema = (schema: Schema<any, any, any>) => {
             `"${schema.metadata.dataType}"`;
 }
 
-const describeJsonFunction = (definition: FunctionCallDefinition) =>
-    `{"args":[${definition.args.map(arg => describeJsonSchema(arg!)).join(",")}],"retVal":${describeJsonSchema(definition.retVal!)}}`;
+export const describeJsonFunction = (definition: FunctionCallDefinition) =>
+    `{"args":[${definition.args.map(arg => describeJsonSchema(arg!)).join(",")
+    }],"retVal":${definition.retVal ? describeJsonSchema(definition.retVal) : `"void"`
+    }}`;
 
 const callImplementation = async <T extends FunctionCallDefinition>(
     eventBody: string,
@@ -53,8 +55,12 @@ export const handlerImpl = <T extends FunctionCallDefinition>(
         if (event.body === PING) return { data: describeJsonFunction(definition) }
         return callImplementation(event.body, definition, implementation)
             .then(retval => ({ data: retval }))
-            .catch(e => ({
-                errorMessage: `Handler error: ${e.message ?? e}`
-            }));
+            .catch(e => {
+                console.error(`Error caught: ${e.message ?? e}`);
+                console.error(e.stack);
+                return {
+                    errorMessage: `Handler error: ${e.message ?? e}`
+                };
+            });
     };
 }

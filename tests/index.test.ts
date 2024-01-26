@@ -23,6 +23,11 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
             simpleApiS.metadata.implementation.meow,
             () => Promise.resolve("Miaou")
         );
+    const noMeowHandler =
+        handlerImpl(
+            simpleApiS.metadata.implementation.noMeow,
+            () => Promise.resolve()
+        );
     type SimpleType = InferTargetFromSchema<typeof simpleRecordS>;
     const incrementHandler =
         handlerImpl(
@@ -47,7 +52,9 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
 
     test("Should check the responsiveness of the handler", async () => {
         expect(await meowHandler({ body: PING })).toEqual({ data: `{"args":[],"retVal":"string"}` });
+        expect(await noMeowHandler({ body: PING })).toEqual({ data: `{"args":[],"retVal":"void"}` });
         expect(await incrementHandler({ body: PING })).toEqual({ data: `{"args":[{"id":"bigint","name":"string"}],"retVal":{"id":"bigint","name":"string"}}` });
+        expect(await doubleArrayHandler({ body: PING })).toEqual({ data: `{"args":["string[]"],"retVal":"string[]"}` });
         expect(await doubleArrayHandler({ body: PING })).toEqual({ data: `{"args":["string[]"],"retVal":"string[]"}` });
     });
 
