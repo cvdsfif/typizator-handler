@@ -49,11 +49,14 @@ const callImplementation = async <T extends FunctionCallDefinition>(
     return JSONBig.stringify(await implementation(...args as any));
 }
 
+export enum ConnectedResources { DATABASE = "DATABASE" }
+
 const defaultHandler = <T extends FunctionCallDefinition>(
     definition: T,
-    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
-    ((event: HandlerEvent) => Promise<HandlerResponse>) =>
-    async (event: HandlerEvent) => {
+    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
+    connectedResources: ConnectedResources[]):
+    ((event: HandlerEvent) => Promise<HandlerResponse>) => {
+    const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
         return callImplementation(event.body, definition, implementation)
             .then(retval => ({ data: retval }))
@@ -65,6 +68,9 @@ const defaultHandler = <T extends FunctionCallDefinition>(
                 });
             });
     };
+    fn.connectedResources = connectedResources;
+    return fn;
+}
 
 export const handlerImpl = <T extends FunctionCallDefinition>(
     definition: T,
@@ -72,7 +78,7 @@ export const handlerImpl = <T extends FunctionCallDefinition>(
     ((event: HandlerEvent) => Promise<HandlerResponse>) =>
     defaultHandler(
         definition,
-        async (...args: InferArguments<T["args"]>) => await implementation(...args));
+        async (...args: InferArguments<T["args"]>) => await implementation(...args), []);
 
 const connectPostgresDb = async () => {
     const host = process.env.DB_ENDPOINT_ADDRESS;
@@ -109,6 +115,7 @@ export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
             } finally {
                 await client.end()
             }
-        });
+        }, [ConnectedResources.DATABASE]);
 
 export { HandlerEvent, HandlerResponse } from "./handler-objects";
+export * from "./database-connection";

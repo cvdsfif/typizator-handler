@@ -66,6 +66,10 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         expect(await doubleArrayHandler({ body: `[["a","b"]]` })).toEqual({ data: `["a","b","a","b"]` });
     });
 
+    test("Should empty connected resources for the appropriate handlers", () => {
+        expect((meowHandler as any).connectedResources).toEqual([]);
+    });
+
     test("Should correctly treat errors", async () => {
         expect(JSON.parse(await errorGeneratorHandler({ body: `["mandatory","nullable","optional"]` }) as string))
             .toEqual({ errorMessage: `Handler error: Custom error` });

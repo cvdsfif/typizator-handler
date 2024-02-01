@@ -3,7 +3,6 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { apiS, intS } from "typizator";
 import { HandlerEvent, HandlerResponse } from "../../src/handler-objects";
 
-
 describe("Test interfaces behaviour on a real database", () => {
     jest.setTimeout(60000);
     let envSaved: NodeJS.ProcessEnv;
@@ -54,11 +53,11 @@ describe("Test interfaces behaviour on a real database", () => {
 
     afterAll(async () => await testClient.end());
 
-    beforeEach(() => {
+    beforeEach(async () => {
         envSaved = process.env
     });
 
-    afterEach(() => process.env = envSaved);
+    afterEach(async () => process.env = envSaved);
 
     test("Should raise an exception if the database access is not configured", async () => {
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));
@@ -84,5 +83,9 @@ describe("Test interfaces behaviour on a real database", () => {
                 password: "secret",
                 port: 5432
             }]);
+    });
+
+    test("Should expose database as connected resource for the appropriate handlers", async () => {
+        expect((getDataHandler as any).connectedResources).toEqual(["DATABASE"]);
     });
 });
