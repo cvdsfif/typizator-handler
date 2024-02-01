@@ -1,12 +1,11 @@
-import { ArrayMetadata, FunctionCallDefinition, InferArguments, InferTargetFromSchema, NotImplementedError, ObjectMetadata, Schema } from "typizator";
+import { ArrayMetadata, FunctionCallDefinition, InferArguments, InferTargetFromSchema, ObjectMetadata, Schema } from "typizator";
 import JSONBig from "json-bigint";
+import { SecretsManager } from "@aws-sdk/client-secrets-manager";
+import { Client } from "pg";
+import { HandlerEvent, HandlerResponse } from "./handler-objects";
+import { DatabaseConnection, connectDatabase } from "./database-connection";
 
 export const PING = "@@ping";
-export type HandlerEvent = { body: string };
-
-export type HandlerResponse = {
-    data: string
-} | string;
 
 export const describeJsonSchema = (schema: Schema<any, any, any>) => {
     return schema.metadata.dataType === "object" ?
@@ -23,10 +22,14 @@ export const describeJsonFunction = (definition: FunctionCallDefinition) =>
     }],"retVal":${definition.retVal ? describeJsonSchema(definition.retVal) : `"void"`
     }}`;
 
+export type HandlerProps = {
+    db?: DatabaseConnection
+}
+
 const callImplementation = async <T extends FunctionCallDefinition>(
     eventBody: string,
     definition: T,
-    implementation: ((...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>)):
+    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
     Promise<string> => {
     let args = [];
     if (definition.args.length > 0) {
@@ -46,11 +49,11 @@ const callImplementation = async <T extends FunctionCallDefinition>(
     return JSONBig.stringify(await implementation(...args as any));
 }
 
-export const handlerImpl = <T extends FunctionCallDefinition>(
+const defaultHandler = <T extends FunctionCallDefinition>(
     definition: T,
-    implementation: ((...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>)):
-    ((event: HandlerEvent) => Promise<HandlerResponse>) => {
-    return async (event: HandlerEvent) => {
+    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
+    ((event: HandlerEvent) => Promise<HandlerResponse>) =>
+    async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
         return callImplementation(event.body, definition, implementation)
             .then(retval => ({ data: retval }))
@@ -62,4 +65,50 @@ export const handlerImpl = <T extends FunctionCallDefinition>(
                 });
             });
     };
+
+export const handlerImpl = <T extends FunctionCallDefinition>(
+    definition: T,
+    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
+    ((event: HandlerEvent) => Promise<HandlerResponse>) =>
+    defaultHandler(
+        definition,
+        async (...args: InferArguments<T["args"]>) => await implementation(...args));
+
+const connectPostgresDb = async () => {
+    const host = process.env.DB_ENDPOINT_ADDRESS;
+    const database = process.env.DB_NAME;
+    const dbSecretArn = process.env.DB_SECRET_ARN;
+    if (!host || !database || !dbSecretArn)
+        throw new Error("Database access not configured, the process environment must contain DB_ENDPOINT_ADDRESS,DB_NAME and DB_SECRET_ARN")
+    const secretString =
+        (await new SecretsManager()
+            .getSecretValue({ SecretId: dbSecretArn }))
+            .SecretString;
+    if (!secretString)
+        throw new Error("Database password not available on AWS secrets");
+    const { password } = JSON.parse(secretString);
+    const client = new Client({
+        user: "postgres",
+        host, database, password,
+        port: 5432
+    });
+    await client.connect();
+    return client;
 }
+
+export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
+    definition: T,
+    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
+    (event: HandlerEvent) => Promise<HandlerResponse> =>
+    defaultHandler(
+        definition,
+        async (...args: InferArguments<T["args"]>) => {
+            const client = await connectPostgresDb();
+            try {
+                return await implementation({ db: connectDatabase(client) }, ...args)
+            } finally {
+                await client.end()
+            }
+        });
+
+export { HandlerEvent, HandlerResponse } from "./handler-objects";
