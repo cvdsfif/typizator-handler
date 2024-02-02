@@ -96,7 +96,8 @@ const connectPostgresDb = async () => {
     const client = new Client({
         user: "postgres",
         host, database, password,
-        port: 5432
+        port: 5432,
+        ssl: true
     });
     await client.connect();
     return client;
