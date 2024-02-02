@@ -81,7 +81,10 @@ describe("Test interfaces behaviour on a real database", () => {
                 database: "db",
                 host: "http://xxx",
                 password: "secret",
-                port: 5432
+                port: 5432,
+                ssl: {
+                    rejectUnauthorized: false
+                }
             }]);
     });
 
