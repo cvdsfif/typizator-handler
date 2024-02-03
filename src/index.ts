@@ -80,7 +80,7 @@ export const handlerImpl = <T extends FunctionCallDefinition>(
         definition,
         async (...args: InferArguments<T["args"]>) => await implementation(...args), []);
 
-const connectPostgresDb = async () => {
+export const connectPostgresDb = async () => {
     const host = process.env.DB_ENDPOINT_ADDRESS;
     const database = process.env.DB_NAME;
     const dbSecretArn = process.env.DB_SECRET_ARN;

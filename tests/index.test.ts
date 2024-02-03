@@ -47,7 +47,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
     const errorGeneratorHandler =
         handlerImpl(
             simpleApiS.metadata.implementation.errorGenerator,
-            (mandatory: string, nullable: string | null, optional: string | null | undefined) => Promise.reject("Custom error")
+            () => Promise.reject("Custom error")
         )
 
     test("Should check the responsiveness of the handler", async () => {
