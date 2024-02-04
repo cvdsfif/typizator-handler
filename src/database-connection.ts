@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { ObjectS, SchemaDefinition, SchemaTarget } from "typizator";
+import { DateSchema, ObjectS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
 import JSONBig from "json-bigint";
 
 export enum ActionOnConflict { REPLACE, REPLACE_IF_NULL, IGNORE }
@@ -8,21 +8,39 @@ export type UpsertProps<T extends SchemaDefinition> = {
     onConflict: ActionOnConflict
 }
 
+export type OverrideActions = "OMIT"
+export type DateOverrideActions = OverrideActions | "NOW"
+export type SchemaOverrideActions<T extends Schema> = T extends DateSchema ? DateOverrideActions : OverrideActions;
+export type FieldsOverride<T extends SchemaDefinition> = {
+    [K in keyof T]?: {
+        action: SchemaOverrideActions<T[K]>
+    }
+}
+export type RecordsWithExclusions<
+    T extends SchemaDefinition,
+    S extends SchemaTarget<T>,
+    D extends FieldsOverride<T>
+> = {
+        [K in keyof S as K extends keyof D ? never : K]: S[K]
+    }
+
 export interface DatabaseConnection {
     client: Client,
     query: (request: string) => Promise<QueryResult<any>>,
     typedQuery: <T extends SchemaDefinition>(schema: ObjectS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
     select: <T extends SchemaDefinition>(schema: ObjectS<T>, tableAndConditions: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
-    multiInsert: <T extends SchemaDefinition>(
+    multiInsert: <T extends SchemaDefinition, D extends FieldsOverride<T>>(
         schema: ObjectS<T>,
         tableName: string,
-        records: SchemaTarget<T>[]) =>
+        records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
+        overrides?: D) =>
         Promise<void>,
-    multiUpsert: <T extends SchemaDefinition>(
+    multiUpsert: <T extends SchemaDefinition, D extends FieldsOverride<T>>(
         schema: ObjectS<T>,
         tableName: string,
-        records: SchemaTarget<T>[],
-        upsertProps: UpsertProps<T>) =>
+        records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
+        upsertProps: UpsertProps<T>,
+        overrides?: D) =>
         Promise<void>
 }
 
@@ -60,24 +78,41 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         });
     };
 
-    private fieldsList = <T extends SchemaDefinition>(schema: ObjectS<T>) =>
-        Array.from(schema.metadata.fields).map(([key]) => camelToSnake(key)).join(",");
+    private fieldsList = <T extends SchemaDefinition, D extends FieldsOverride<T>>(schema: ObjectS<T>, overrides: D) =>
+        Array.from(schema.metadata.fields)
+            .filter(([key]) => overrides[key as string]?.action !== "OMIT")
+            .map(([key]) => camelToSnake(key))
+            .join(",");
 
     select = async <T extends SchemaDefinition>(schema: ObjectS<T>, tableAndConditions: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> =>
-        this.typedQuery(schema, `SELECT ${this.fieldsList(schema)} FROM ${tableAndConditions}`, parameters);
+        this.typedQuery(schema, `SELECT ${this.fieldsList(schema, {})} FROM ${tableAndConditions}`, parameters);
 
-    private valuesBlock = <T extends SchemaDefinition>(schema: ObjectS<T>, records: SchemaTarget<T>, idx: number) =>
-        `(${Array.from(schema.metadata.fields).map((_, i) => `$${idx * schema.metadata.fields.size + i + 1}`).join(",")})`;
+    private valuesBlock = <T extends SchemaDefinition, D extends FieldsOverride<T>>
+        (schema: ObjectS<T>, idx: number, overrides: D) => {
+        let counter = 1;
+        const nonOmittedFields = schema.metadata.fields.size -
+            Object.keys(overrides).filter(key => overrides[key]).length;
+        return `(${Array.from(schema.metadata.fields)
+            .filter(([key]) => overrides[key as string]?.action !== "OMIT")
+            .map(([key]) =>
+                overrides[key as string]?.action === "NOW" ?
+                    "now()" :
+                    `$${idx * nonOmittedFields + (counter++)}`
+            )
+            .join(",")})`
+    }
 
-    private recordsBlock = <T extends SchemaDefinition>(schema: ObjectS<T>, records: SchemaTarget<T>[]) =>
-        records.map((record, idx) => this.valuesBlock(schema, record, idx)).join(",");
+    private recordsBlock = <T extends SchemaDefinition, D extends FieldsOverride<T>>
+        (schema: ObjectS<T>, records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], overrides: D) =>
+        records.map((_, idx) => this.valuesBlock(schema, idx, overrides)).join(",");
 
-    private resolveEventualConflicts = <T extends SchemaDefinition>(records: SchemaTarget<T>[], upsertProps: UpsertProps<T>) => {
+    private resolveEventualConflicts = <T extends SchemaDefinition, D extends FieldsOverride<T>>
+        (records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], upsertProps: UpsertProps<T>) => {
         if (upsertProps.upsertFields.length === 0) return records;
         switch (upsertProps.onConflict) {
             case ActionOnConflict.IGNORE: return records;
             case ActionOnConflict.REPLACE_IF_NULL: {
-                const recordsPresent = new Map<string, SchemaTarget<T>>;
+                const recordsPresent = new Map<string, RecordsWithExclusions<T, SchemaTarget<T>, D>>;
                 return records
                     .reverse()
                     .filter(record => {
@@ -109,11 +144,15 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         }
     }
 
-    private recordsAsArray = <T extends SchemaDefinition>(schema: ObjectS<T>, records: SchemaTarget<T>[]) =>
-        records.map(
-            record => Array.from(schema.metadata.fields)
-                .map(([key]) => (record as any)[key as string])
-        ).flat();
+    private recordsAsArray = <T extends SchemaDefinition, D extends FieldsOverride<T>>
+        (schema: ObjectS<T>, records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], overrides: D) =>
+        records
+            .map(
+                record => Array.from(schema.metadata.fields)
+                    .filter(([key]) => !overrides[key as string]?.action)
+                    .map(([key]) => (record as any)[key as string])
+            )
+            .flat();
 
     private upsertSetStatement = <T extends SchemaDefinition>(schema: ObjectS<T>, upsertProps: UpsertProps<T>) =>
         Array.from(schema.metadata.fields)
@@ -134,18 +173,19 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         `ON CONFLICT(${upsertProps.upsertFields.map(field => camelToSnake(field as string)).join(",")})
         ${this.upsertSetStatement(schema, upsertProps)}`
 
-    multiInsert = async <T extends SchemaDefinition>(
+    multiInsert = async <T extends SchemaDefinition, D extends FieldsOverride<T>>(
         schema: ObjectS<T>,
         tableName: string,
-        recordsInput: SchemaTarget<T>[],
+        recordsInput: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
+        overrides = {} as D,
         upsertProps = { upsertFields: [], onConflict: ActionOnConflict.IGNORE } as UpsertProps<T>):
         Promise<void> => {
         const records = this.resolveEventualConflicts(recordsInput, upsertProps);
         const queryText =
-            `INSERT INTO ${tableName} AS _src(${this.fieldsList(schema)}) 
-            VALUES ${this.recordsBlock(schema, records)}
+            `INSERT INTO ${tableName} AS _src(${this.fieldsList(schema, overrides)}) 
+            VALUES ${this.recordsBlock(schema, records, overrides)}
             ${upsertProps.upsertFields.length > 0 ? this.upsertStatement(schema, upsertProps) : ""}`;
-        const recordsAsArray = this.recordsAsArray(schema, records);
+        const recordsAsArray = this.recordsAsArray(schema, records, overrides);
         try {
             await this.client.query({
                 text: queryText,
@@ -157,12 +197,13 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         }
     }
 
-    multiUpsert = async <T extends SchemaDefinition>(
+    multiUpsert = async <T extends SchemaDefinition, D extends FieldsOverride<T>>(
         schema: ObjectS<T>,
         tableName: string,
-        records: SchemaTarget<T>[],
-        upsertProps: UpsertProps<T>):
-        Promise<void> => this.multiInsert(schema, tableName, records, upsertProps);
+        records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
+        upsertProps: UpsertProps<T>,
+        overrides = {} as D):
+        Promise<void> => this.multiInsert(schema, tableName, records, overrides, upsertProps);
 };
 
 export const connectDatabase = (client: Client) => new DatabaseConnectionImpl(client) as DatabaseConnection;

@@ -17,7 +17,7 @@ describe("Testing the database type handling tools", () => {
     afterAll(async () => connection.client.end());
 
     beforeEach(async () => {
-        await connection.query("CREATE TABLE test_table(id_field DECIMAL PRIMARY KEY,name VARCHAR(255))");
+        await connection.query("CREATE TABLE test_table(id_field DECIMAL PRIMARY KEY,name VARCHAR(255),date_field TIMESTAMPTZ)");
     });
 
     afterEach(async () => {
@@ -236,5 +236,26 @@ describe("Testing the database type handling tools", () => {
                 { idField: 2n, name: "Two" },
                 { idField: 3n, name: "Another three" }
             ]);
+    });
+
+    test("Should insert multiple rows in a table in a single request omitting and overriding some of them", async () => {
+        const testS = objectS({
+            idField: bigintS,
+            name: stringS,
+            dateField: dateS
+        });
+        await connection.multiInsert(testS, "test_table",
+            [
+                { idField: 12345678901234567890n },
+                { idField: 2n }
+            ],
+            {
+                name: { action: "OMIT" },
+                dateField: { action: "NOW" }
+            }
+        );
+        const fields = await connection.select(testS, "test_table ORDER BY id_field DESC")
+        const nowOnServer = await connection.typedQuery(objectS({ isNow: dateS }), "SELECT now() AS is_now", [])
+        expect(fields[0].dateField?.getTime()).toBeGreaterThan(nowOnServer[0].isNow!.getTime() - 30000)
     });
 });
