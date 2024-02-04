@@ -242,7 +242,7 @@ describe("Testing the database type handling tools", () => {
         const testS = objectS({
             idField: bigintS,
             name: stringS,
-            dateField: dateS
+            dateField: dateS.notNull
         });
         await connection.multiInsert(testS, "test_table",
             [

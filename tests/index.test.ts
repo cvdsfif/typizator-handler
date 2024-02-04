@@ -28,6 +28,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
             simpleApiS.metadata.implementation.noMeow,
             () => Promise.resolve()
         );
+
     type SimpleType = InferTargetFromSchema<typeof simpleRecordS>;
     const incrementHandler =
         handlerImpl(

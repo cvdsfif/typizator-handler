@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { DateSchema, ObjectS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
+import { DateS, ExtractFromFacade, ObjectS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
 import JSONBig from "json-bigint";
 
 export enum ActionOnConflict { REPLACE, REPLACE_IF_NULL, IGNORE }
@@ -10,7 +10,7 @@ export type UpsertProps<T extends SchemaDefinition> = {
 
 export type OverrideActions = "OMIT"
 export type DateOverrideActions = OverrideActions | "NOW"
-export type SchemaOverrideActions<T extends Schema> = T extends DateSchema ? DateOverrideActions : OverrideActions;
+export type SchemaOverrideActions<T extends Schema> = ExtractFromFacade<T> extends DateS ? DateOverrideActions : OverrideActions;
 export type FieldsOverride<T extends SchemaDefinition> = {
     [K in keyof T]?: {
         action: SchemaOverrideActions<T[K]>
