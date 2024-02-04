@@ -26,8 +26,8 @@ export interface DatabaseConnection {
         Promise<void>
 }
 
-const snakeToCamel = (src: string | String) => src.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
-const camelToSnake = (src: string | String) => src.replace(/[A-Z]/g, match => `_${match.toLowerCase()}`);
+export const snakeToCamel = (src: string | String) => src.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
+export const camelToSnake = (src: string | String) => src.replace(/[A-Z]/g, match => `_${match.toLowerCase()}`);
 class DatabaseConnectionImpl implements DatabaseConnection {
     constructor(public client: Client) { }
 
