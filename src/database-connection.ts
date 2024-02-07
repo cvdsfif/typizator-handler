@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { DateS, ExtractFromFacade, ObjectS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
+import { DateS, DefaultBehaviour, ExtractFromFacade, NotNullFacade, ObjectS, Schema, SchemaDefinition, SchemaSource, SchemaTarget } from "typizator";
 import JSONBig from "json-bigint";
 
 export enum ActionOnConflict { REPLACE, REPLACE_IF_NULL, IGNORE }
@@ -24,19 +24,23 @@ export type RecordsWithExclusions<
         [K in keyof S as K extends keyof D ? never : K]: S[K]
     }
 
+export type ObjectOrFacadeS<T extends SchemaDefinition> =
+    ObjectS<T> |
+    NotNullFacade<SchemaTarget<T>, SchemaSource<T>, DefaultBehaviour, ObjectS<T>>
+
 export interface DatabaseConnection {
     client: Client,
     query: (request: string) => Promise<QueryResult<any>>,
-    typedQuery: <T extends SchemaDefinition>(schema: ObjectS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
-    select: <T extends SchemaDefinition>(schema: ObjectS<T>, tableAndConditions: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
+    typedQuery: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
+    select: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, tableAndConditions: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
     multiInsert: <T extends SchemaDefinition, D extends FieldsOverride<T>>(
-        schema: ObjectS<T>,
+        schema: ObjectOrFacadeS<T>,
         tableName: string,
         records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
         overrides?: D) =>
         Promise<void>,
     multiUpsert: <T extends SchemaDefinition, D extends FieldsOverride<T>>(
-        schema: ObjectS<T>,
+        schema: ObjectOrFacadeS<T>,
         tableName: string,
         records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
         upsertProps: UpsertProps<T>,
@@ -51,7 +55,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
 
     query = async (request: string) => await this.client.query(request);
 
-    typedQuery = async <T extends SchemaDefinition>(schema: ObjectS<T>, query: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> => {
+    typedQuery = async <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> => {
         const res = await this.client.query({
             text: query,
             values: parameters,
@@ -78,17 +82,17 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         });
     };
 
-    private fieldsList = <T extends SchemaDefinition, D extends FieldsOverride<T>>(schema: ObjectS<T>, overrides: D) =>
+    private fieldsList = <T extends SchemaDefinition, D extends FieldsOverride<T>>(schema: ObjectOrFacadeS<T>, overrides: D) =>
         Array.from(schema.metadata.fields)
             .filter(([key]) => overrides[key as string]?.action !== "OMIT")
             .map(([key]) => camelToSnake(key))
             .join(",");
 
-    select = async <T extends SchemaDefinition>(schema: ObjectS<T>, tableAndConditions: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> =>
+    select = async <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, tableAndConditions: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> =>
         this.typedQuery(schema, `SELECT ${this.fieldsList(schema, {})} FROM ${tableAndConditions}`, parameters);
 
     private valuesBlock = <T extends SchemaDefinition, D extends FieldsOverride<T>>
-        (schema: ObjectS<T>, idx: number, overrides: D) => {
+        (schema: ObjectOrFacadeS<T>, idx: number, overrides: D) => {
         let counter = 1;
         const nonOmittedFields = schema.metadata.fields.size -
             Object.keys(overrides).filter(key => overrides[key]).length;
@@ -103,7 +107,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
     }
 
     private recordsBlock = <T extends SchemaDefinition, D extends FieldsOverride<T>>
-        (schema: ObjectS<T>, records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], overrides: D) =>
+        (schema: ObjectOrFacadeS<T>, records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], overrides: D) =>
         records.map((_, idx) => this.valuesBlock(schema, idx, overrides)).join(",");
 
     private resolveEventualConflicts = <T extends SchemaDefinition, D extends FieldsOverride<T>>
@@ -145,7 +149,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
     }
 
     private recordsAsArray = <T extends SchemaDefinition, D extends FieldsOverride<T>>
-        (schema: ObjectS<T>, records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], overrides: D) =>
+        (schema: ObjectOrFacadeS<T>, records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], overrides: D) =>
         records
             .map(
                 record => Array.from(schema.metadata.fields)
@@ -154,7 +158,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             )
             .flat();
 
-    private upsertSetStatement = <T extends SchemaDefinition>(schema: ObjectS<T>, upsertProps: UpsertProps<T>) =>
+    private upsertSetStatement = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
         Array.from(schema.metadata.fields)
             .filter(([field]) => !upsertProps.upsertFields.includes(field as string))
             .map(([field]) => {
@@ -169,12 +173,12 @@ class DatabaseConnectionImpl implements DatabaseConnection {
                 }
             });
 
-    private upsertStatement = <T extends SchemaDefinition>(schema: ObjectS<T>, upsertProps: UpsertProps<T>) =>
+    private upsertStatement = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
         `ON CONFLICT(${upsertProps.upsertFields.map(field => camelToSnake(field as string)).join(",")})
         ${this.upsertSetStatement(schema, upsertProps)}`
 
     multiInsert = async <T extends SchemaDefinition, D extends FieldsOverride<T>>(
-        schema: ObjectS<T>,
+        schema: ObjectOrFacadeS<T>,
         tableName: string,
         recordsInput: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
         overrides = {} as D,
@@ -198,7 +202,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
     }
 
     multiUpsert = async <T extends SchemaDefinition, D extends FieldsOverride<T>>(
-        schema: ObjectS<T>,
+        schema: ObjectOrFacadeS<T>,
         tableName: string,
         records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
         upsertProps: UpsertProps<T>,

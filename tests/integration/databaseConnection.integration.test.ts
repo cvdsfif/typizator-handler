@@ -137,7 +137,7 @@ describe("Testing the database type handling tools", () => {
         const testS = objectS({
             idField: bigintS,
             name: stringS
-        });
+        }).notNull;
         await connection.multiInsert(testS, "test_table",
             [
                 { idField: 12345678901234567890n, name: "One" },
@@ -223,7 +223,7 @@ describe("Testing the database type handling tools", () => {
         const testS = objectS({
             idField: bigintS,
             name: stringS
-        });
+        }).notNull;
         await connection.multiUpsert(testS, "test_table",
             [
                 { idField: 2n, name: "Two" },
