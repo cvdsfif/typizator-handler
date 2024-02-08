@@ -299,5 +299,34 @@ describe("Testing the database type handling tools", () => {
         const fields = await connection.select(testS, "test_table ORDER BY id_field DESC")
         const nowOnServer = await connection.typedQuery(objectS({ isNow: dateS }), "SELECT now() AS is_now", [])
         expect(fields[0].dateField?.getTime()).toBeGreaterThan(nowOnServer[0].isNow!.getTime() - 30000)
-    });
+    })
+
+    test("Should allow the omit action for select", async () => {
+        const testS = objectS({
+            idField: bigintS,
+            name: stringS,
+            dateField: dateS.notNull,
+            unknownField: intS.optional
+        });
+        await connection.multiInsert(testS, "test_table",
+            [
+                { idField: 12345678901234567890n },
+                { idField: 2n }
+            ],
+            {
+                name: { action: "OMIT" },
+                unknownField: { action: "OMIT" },
+                dateField: { action: "NOW" }
+            }
+        );
+        const fields = await connection.select(
+            testS,
+            "test_table ORDER BY id_field DESC",
+            [],
+            { unknownField: { action: "OMIT" } })
+        const nowOnServer = await connection.typedQuery(
+            objectS({ isNow: dateS }), "SELECT now() AS is_now", []
+        )
+        expect(fields[0].dateField?.getTime()).toBeGreaterThan(nowOnServer[0].isNow!.getTime() - 30000)
+    })
 });

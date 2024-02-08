@@ -32,7 +32,15 @@ export interface DatabaseConnection {
     client: Client,
     query: (request: string) => Promise<QueryResult<any>>,
     typedQuery: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
-    select: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, tableAndConditions: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
+    select: <
+        T extends SchemaDefinition,
+        D extends FieldsOverride<T> = {}
+    >(
+        schema: ObjectOrFacadeS<T>,
+        tableAndConditions: string,
+        parameters?: any[],
+        overrides?: D
+    ) => Promise<SchemaTarget<T>[]>,
     multiInsert: <T extends SchemaDefinition, D extends FieldsOverride<T> = {}>(
         schema: ObjectOrFacadeS<T>,
         tableName: string,
@@ -88,8 +96,16 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             .map(([key]) => camelToSnake(key))
             .join(",");
 
-    select = async <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, tableAndConditions: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> =>
-        this.typedQuery(schema, `SELECT ${this.fieldsList(schema, {})} FROM ${tableAndConditions}`, parameters);
+    select = async <
+        T extends SchemaDefinition,
+        D extends FieldsOverride<T>
+    >(
+        schema: ObjectOrFacadeS<T>,
+        tableAndConditions: string,
+        parameters = [] as any[],
+        overrides = {} as D
+    ): Promise<SchemaTarget<T>[]> =>
+        this.typedQuery(schema, `SELECT ${this.fieldsList(schema, overrides)} FROM ${tableAndConditions}`, parameters);
 
     private valuesBlock = <T extends SchemaDefinition, D extends FieldsOverride<T>>
         (schema: ObjectOrFacadeS<T>, idx: number, overrides: D) => {
