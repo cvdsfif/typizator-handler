@@ -33,13 +33,13 @@ export interface DatabaseConnection {
     query: (request: string) => Promise<QueryResult<any>>,
     typedQuery: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
     select: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, tableAndConditions: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
-    multiInsert: <T extends SchemaDefinition, D extends FieldsOverride<T>>(
+    multiInsert: <T extends SchemaDefinition, D extends FieldsOverride<T> = {}>(
         schema: ObjectOrFacadeS<T>,
         tableName: string,
         records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
         overrides?: D) =>
         Promise<void>,
-    multiUpsert: <T extends SchemaDefinition, D extends FieldsOverride<T>>(
+    multiUpsert: <T extends SchemaDefinition, D extends FieldsOverride<T> = {}>(
         schema: ObjectOrFacadeS<T>,
         tableName: string,
         records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
@@ -158,20 +158,32 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             )
             .flat();
 
-    private upsertSetStatement = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
+    private upsertReplaceByExcluded = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
         Array.from(schema.metadata.fields)
             .filter(([field]) => !upsertProps.upsertFields.includes(field as string))
             .map(([field]) => {
                 const snakeCaseField = camelToSnake(field);
-                switch (upsertProps.onConflict) {
-                    case ActionOnConflict.REPLACE:
-                        return `DO UPDATE SET ${snakeCaseField} = EXCLUDED.${snakeCaseField}`;
-                    case ActionOnConflict.REPLACE_IF_NULL:
-                        return `DO UPDATE SET ${snakeCaseField} = COALESCE(_src.${snakeCaseField},EXCLUDED.${snakeCaseField})`;
-                    case ActionOnConflict.IGNORE:
-                        return `DO NOTHING`;
-                }
-            });
+                return `${snakeCaseField} = EXCLUDED.${snakeCaseField}`
+            }).join(",")
+
+    private upsertCoalesceWithExcluded = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
+        Array.from(schema.metadata.fields)
+            .filter(([field]) => !upsertProps.upsertFields.includes(field as string))
+            .map(([field]) => {
+                const snakeCaseField = camelToSnake(field);
+                return `${snakeCaseField} = COALESCE(_src.${snakeCaseField},EXCLUDED.${snakeCaseField})`
+            }).join(",")
+
+    private upsertSetStatement = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) => {
+        switch (upsertProps.onConflict) {
+            case ActionOnConflict.REPLACE:
+                return `DO UPDATE SET ${this.upsertReplaceByExcluded(schema, upsertProps)}`
+            case ActionOnConflict.REPLACE_IF_NULL:
+                return `DO UPDATE SET ${this.upsertCoalesceWithExcluded(schema, upsertProps)}`
+            case ActionOnConflict.IGNORE:
+                return `DO NOTHING`
+        }
+    }
 
     private upsertStatement = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
         `ON CONFLICT(${upsertProps.upsertFields.map(field => camelToSnake(field as string)).join(",")})

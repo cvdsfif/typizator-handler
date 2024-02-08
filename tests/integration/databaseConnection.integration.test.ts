@@ -1,7 +1,7 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
-import { ActionOnConflict, DatabaseConnection, connectDatabase } from "../../src/database-connection";
-import { bigintS, boolS, dateS, intS, objectS, stringS } from "typizator";
+import { ActionOnConflict, DatabaseConnection, ObjectOrFacadeS, RecordsWithExclusions, connectDatabase } from "../../src/database-connection";
+import { SchemaTarget, bigintS, boolS, dateS, intS, objectS, stringS } from "typizator";
 
 describe("Testing the database type handling tools", () => {
     jest.setTimeout(60000);
@@ -10,14 +10,14 @@ describe("Testing the database type handling tools", () => {
     beforeAll(async () => {
         const container = await new PostgreSqlContainer().withReuse().start();
         const client = new Client({ connectionString: container.getConnectionUri() });
-        client.connect();
+        await client.connect();
         connection = connectDatabase(client);
     });
 
-    afterAll(async () => connection.client.end());
+    afterAll(async () => await connection.client.end());
 
     beforeEach(async () => {
-        await connection.query("CREATE TABLE test_table(id_field DECIMAL PRIMARY KEY,name VARCHAR(255),date_field TIMESTAMPTZ)");
+        await connection.query("CREATE TABLE test_table(id_field DECIMAL PRIMARY KEY,name VARCHAR(255),date_field TIMESTAMPTZ,name2 VARCHAR(255))");
     });
 
     afterEach(async () => {
@@ -130,6 +130,27 @@ describe("Testing the database type handling tools", () => {
         expect(await connection.select(testS, "test_table WHERE id_field = 2")).toEqual(
             [
                 { idField: 2n, name: "Another two" }
+            ]);
+    });
+
+    test("Should insert correctly execute overwriting upserts with multiple updated fields", async () => {
+        const testS = objectS({
+            idField: bigintS,
+            name: stringS,
+            name2: stringS.notNull
+        });
+        await connection.multiInsert(testS, "test_table",
+            [
+                { idField: 12345678901234567890n, name: "One", name2: "21" },
+                { idField: 2n, name: "Two", name2: "22" }
+            ]);
+        await connection.multiUpsert(testS, "test_table",
+            [
+                { idField: 2n, name: "Another two", name2: "42" }
+            ], { upsertFields: ["idField"], onConflict: ActionOnConflict.REPLACE });
+        expect(await connection.select(testS, "test_table WHERE id_field = 2")).toEqual(
+            [
+                { idField: 2n, name: "Another two", name2: "42" }
             ]);
     });
 
