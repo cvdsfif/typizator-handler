@@ -178,36 +178,64 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             )
             .flat();
 
-    private upsertReplaceByExcluded = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
+    private upsertReplaceByExcluded = <
+        T extends SchemaDefinition,
+        D extends FieldsOverride<T>
+    >(
+        schema: ObjectOrFacadeS<T>,
+        upsertProps: UpsertProps<T>,
+        overrides: D
+    ) =>
         Array.from(schema.metadata.fields)
-            .filter(([field]) => !upsertProps.upsertFields.includes(field as string))
+            .filter(([field]) => !upsertProps.upsertFields.includes(field as string) && overrides[field as string]?.action !== "OMIT")
             .map(([field]) => {
                 const snakeCaseField = camelToSnake(field);
                 return `${snakeCaseField} = EXCLUDED.${snakeCaseField}`
             }).join(",")
 
-    private upsertCoalesceWithExcluded = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
+    private upsertCoalesceWithExcluded = <
+        T extends SchemaDefinition,
+        D extends FieldsOverride<T>
+    >(
+        schema: ObjectOrFacadeS<T>,
+        upsertProps: UpsertProps<T>,
+        overrides: D
+    ) =>
         Array.from(schema.metadata.fields)
-            .filter(([field]) => !upsertProps.upsertFields.includes(field as string))
+            .filter(([field]) => !upsertProps.upsertFields.includes(field as string) && overrides[field as string]?.action !== "OMIT")
             .map(([field]) => {
                 const snakeCaseField = camelToSnake(field);
                 return `${snakeCaseField} = COALESCE(_src.${snakeCaseField},EXCLUDED.${snakeCaseField})`
             }).join(",")
 
-    private upsertSetStatement = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) => {
+    private upsertSetStatement = <
+        T extends SchemaDefinition,
+        D extends FieldsOverride<T>
+    >(
+        schema: ObjectOrFacadeS<T>,
+        upsertProps: UpsertProps<T>,
+        overrides: D
+    ) => {
         switch (upsertProps.onConflict) {
             case ActionOnConflict.REPLACE:
-                return `DO UPDATE SET ${this.upsertReplaceByExcluded(schema, upsertProps)}`
+                return `DO UPDATE SET ${this.upsertReplaceByExcluded(schema, upsertProps, overrides)}`
             case ActionOnConflict.REPLACE_IF_NULL:
-                return `DO UPDATE SET ${this.upsertCoalesceWithExcluded(schema, upsertProps)}`
+                return `DO UPDATE SET ${this.upsertCoalesceWithExcluded(schema, upsertProps, overrides)}`
             case ActionOnConflict.IGNORE:
                 return `DO NOTHING`
         }
     }
 
-    private upsertStatement = <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, upsertProps: UpsertProps<T>) =>
+    private upsertStatement = <
+        T extends SchemaDefinition,
+        D extends FieldsOverride<T>
+    >(
+        schema: ObjectOrFacadeS<T>,
+        upsertProps: UpsertProps<T>,
+        overrides: D
+    ) =>
         `ON CONFLICT(${upsertProps.upsertFields.map(field => camelToSnake(field as string)).join(",")})
-        ${this.upsertSetStatement(schema, upsertProps)}`
+        ${this.upsertSetStatement(schema, upsertProps, overrides)}`
 
     multiInsert = async <T extends SchemaDefinition, D extends FieldsOverride<T>>(
         schema: ObjectOrFacadeS<T>,
@@ -220,7 +248,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         const queryText =
             `INSERT INTO ${tableName} AS _src(${this.fieldsList(schema, overrides)}) 
             VALUES ${this.recordsBlock(schema, records, overrides)}
-            ${upsertProps.upsertFields.length > 0 ? this.upsertStatement(schema, upsertProps) : ""}`;
+            ${upsertProps.upsertFields.length > 0 ? this.upsertStatement(schema, upsertProps, overrides) : ""}`;
         const recordsAsArray = this.recordsAsArray(schema, records, overrides);
         try {
             await this.client.query({

@@ -140,6 +140,27 @@ describe("Testing the database type handling tools", () => {
             ]);
     });
 
+    test("Should exclude requested fields from upserts", async () => {
+        const testS = objectS({
+            idField: bigintS,
+            name: stringS,
+            extraField: stringS.optional
+        });
+        await connection.multiInsert(testS, "test_table",
+            [
+                { idField: 12345678901234567890n, name: "One" },
+                { idField: 2n, name: "Two" }
+            ], { extraField: { action: "OMIT" } });
+        await connection.multiUpsert(testS, "test_table",
+            [
+                { idField: 2n, name: "Another two" }
+            ], { upsertFields: ["idField"], onConflict: ActionOnConflict.REPLACE }, { extraField: { action: "OMIT" } });
+        expect(await connection.select(testS, "test_table WHERE id_field = 2", [], { extraField: { action: "OMIT" } })).toEqual(
+            [
+                { idField: 2n, name: "Another two" }
+            ]);
+    })
+
     test("Should insert correctly execute overwriting upserts with multiple updated fields", async () => {
         const testS = objectS({
             idField: bigintS,
