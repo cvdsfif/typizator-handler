@@ -24,6 +24,13 @@ describe("Testing the database type handling tools", () => {
         await connection.query("DROP TABLE test_table");
     });
 
+    test("Should correctly execute a query with parameters", async () => {
+        await connection.query("INSERT INTO test_table(id_field,name) VALUES (1,'one'),(2,'two')")
+        const result = (await connection.query("SELECT name FROM test_table WHERE id_field = $1", [2])).rows
+        expect(result.length).toEqual(1)
+        expect(result[0].name).toEqual("two")
+    })
+
     test("Should extract defined type array from the database query", async () => {
         const reqS = objectS({
             id: bigintS,

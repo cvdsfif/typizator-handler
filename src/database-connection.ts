@@ -30,7 +30,7 @@ export type ObjectOrFacadeS<T extends SchemaDefinition> =
 
 export interface DatabaseConnection {
     client: Client,
-    query: (request: string) => Promise<QueryResult<any>>,
+    query: (request: string, parameters?: any[]) => Promise<QueryResult<any>>,
     typedQuery: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
     select: <
         T extends SchemaDefinition,
@@ -61,7 +61,11 @@ export const camelToSnake = (src: string | String) => src.replace(/[A-Z]/g, matc
 class DatabaseConnectionImpl implements DatabaseConnection {
     constructor(public client: Client) { }
 
-    query = async (request: string) => await this.client.query(request);
+    query = async (request: string, parameters = [] as any[]) =>
+        await this.client.query({
+            text: request,
+            values: parameters
+        });
 
     typedQuery = async <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> => {
         const res = await this.client.query({
