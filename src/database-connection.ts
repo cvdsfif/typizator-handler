@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { DateS, DefaultBehaviour, ExtractFromFacade, NotNullFacade, ObjectS, Schema, SchemaDefinition, SchemaSource, SchemaTarget } from "typizator";
+import { DateS, DefaultBehaviour, ExtractFromFacade, NotNullFacade, ObjectOrFacadeS, ObjectS, Schema, SchemaDefinition, SchemaSource, SchemaTarget } from "typizator";
 import JSONBig from "json-bigint";
 
 export enum ActionOnConflict { REPLACE, REPLACE_IF_NULL, IGNORE }
@@ -23,10 +23,6 @@ export type RecordsWithExclusions<
 > = {
         [K in keyof S as K extends keyof D ? never : K]: S[K]
     }
-
-export type ObjectOrFacadeS<T extends SchemaDefinition> =
-    ObjectS<T> |
-    NotNullFacade<SchemaTarget<T>, SchemaSource<T>, DefaultBehaviour, ObjectS<T>>
 
 export interface DatabaseConnection {
     client: Client,

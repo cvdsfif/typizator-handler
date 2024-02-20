@@ -1,7 +1,7 @@
 {
   "name": "typizator-handler",
-  "version": "1.0.0-beta.24",
-  "description": "Handler converting JSON events to strict types for AWS lambdas and similar applications",
+  "version": "1.0.0-beta.25",
+  "description": "Database facade and handler converting JSON events to strict types for AWS lambdas and similar applications",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
@@ -31,7 +31,7 @@
     "@aws-sdk/client-secrets-manager": "^3.502.0",
     "json-bigint": "^1.0.0",
     "pg": "^8.11.3",
-    "typizator": "^1.0.0-beta.32"
+    "typizator": "^1.0.0-beta.35"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^10.6.0",

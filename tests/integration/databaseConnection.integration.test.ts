@@ -1,7 +1,7 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
-import { ActionOnConflict, DatabaseConnection, ObjectOrFacadeS, RecordsWithExclusions, connectDatabase } from "../../src/database-connection";
-import { SchemaTarget, bigintS, boolS, dateS, intS, objectS, stringS } from "typizator";
+import { ActionOnConflict, DatabaseConnection, connectDatabase } from "../../src/database-connection";
+import { bigintS, boolS, dateS, intS, objectS, stringS } from "typizator";
 
 describe("Testing the database type handling tools", () => {
     jest.setTimeout(60000);

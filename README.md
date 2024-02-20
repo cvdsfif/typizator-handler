@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Clean converting of JSON parameters for AWS lambdas and similar applications
+Well-typed database facade and clean converting of JSON parameters for AWS lambdas and similar applications
 
 ## Installing
 
