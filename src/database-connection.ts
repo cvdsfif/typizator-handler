@@ -240,6 +240,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         overrides = {} as D,
         upsertProps = { upsertFields: [], onConflict: ActionOnConflict.IGNORE } as UpsertProps<T>):
         Promise<void> => {
+        if (recordsInput.length == 0) return;
         const records = this.resolveEventualConflicts(recordsInput, upsertProps);
         const queryText =
             `INSERT INTO ${tableName} AS _src(${this.fieldsList(schema, overrides)}) 

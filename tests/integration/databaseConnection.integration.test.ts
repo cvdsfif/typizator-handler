@@ -357,4 +357,8 @@ describe("Testing the database type handling tools", () => {
         )
         expect(fields[0].dateField?.getTime()).toBeGreaterThan(nowOnServer[0].isNow!.getTime() - 30000)
     })
+
+    test("Multiinsert should ignore empty dataset", async () => {
+        expect(async () => await connection.multiInsert(objectS({ anyValue: stringS }), "Anything", [])).not.toThrow()
+    })
 });
