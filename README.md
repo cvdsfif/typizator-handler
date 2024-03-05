@@ -11,3 +11,9 @@ Well-typed database facade and clean converting of JSON parameters for AWS lambd
 ```Bash
 npm i typizator-handler
 ```
+
+## Documentation and tests
+
+This library provides AWS lambda handlers to implement API methods defined by [typizator](https://www.npmjs.com/package/typizator) schemas.
+
+It also defines a Postgres database facade to make requests using the same runtime type schemas.

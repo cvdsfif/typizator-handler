@@ -22,7 +22,13 @@ export const describeJsonFunction = (definition: FunctionCallDefinition) =>
     }],"retVal":${definition.retVal ? describeJsonSchema(definition.retVal) : `"void"`
     }}`;
 
+/**
+ * Properties passed to a connected AWS lambda handler
+ */
 export type HandlerProps = {
+    /**
+     * If the handler is connected to a database, this is the handler facade allowing to execute queries on that database
+     */
     db?: DatabaseConnection
 }
 
@@ -49,6 +55,9 @@ const callImplementation = async <T extends FunctionCallDefinition>(
     return JSONBig.stringify(await implementation(...args as any));
 }
 
+/**
+ * Types of connected resources. For now only DATABASE is supported
+ */
 export enum ConnectedResources { DATABASE = "DATABASE" }
 
 const defaultHandler = <T extends FunctionCallDefinition>(
@@ -72,6 +81,12 @@ const defaultHandler = <T extends FunctionCallDefinition>(
     return fn;
 }
 
+/**
+ * Connects a Lambda handler for an API method, without server resources connected
+ * @param definition Method defined in an `apiS` schema
+ * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
+ * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
+ */
 export const handlerImpl = <T extends FunctionCallDefinition>(
     definition: T,
     implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
@@ -80,6 +95,13 @@ export const handlerImpl = <T extends FunctionCallDefinition>(
         definition,
         async (...args: InferArguments<T["args"]>) => await implementation(...args), []);
 
+/**
+ * Creates a database connection using the `pg` library from the environment variables.
+ * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
+ * - DB_NAME is the name of the database to connect to
+ * - DB_SECRET_ARN is the identifier of the AWS Secret containing the password needed to access the database
+ * @returns Database connection, as defined in the `pg` library
+ */
 export const connectPostgresDb = async () => {
     const host = process.env.DB_ENDPOINT_ADDRESS;
     const database = process.env.DB_NAME;
@@ -105,6 +127,12 @@ export const connectPostgresDb = async () => {
     return client;
 }
 
+/**
+ * Connects a Lambda handler for an API method, without server resources connected
+ * @param definition Method defined in an `apiS` schema
+ * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
+ * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
+ */
 export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
     definition: T,
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):

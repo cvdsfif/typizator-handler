@@ -2,20 +2,65 @@ import { Client, QueryResult } from "pg";
 import { DateS, DefaultBehaviour, ExtractFromFacade, NotNullFacade, ObjectOrFacadeS, ObjectS, Schema, SchemaDefinition, SchemaSource, SchemaTarget } from "typizator";
 import JSONBig from "json-bigint";
 
-export enum ActionOnConflict { REPLACE, REPLACE_IF_NULL, IGNORE }
+/**
+ * What to do if an INSERT encounters a conflict on one of the unique keys
+ */
+export enum ActionOnConflict {
+    /**
+     * Replace the old value
+     */
+    REPLACE,
+    /**
+     * Replace the old value if it is null
+     */
+    REPLACE_IF_NULL,
+    /**
+     * Leave the old value as it is
+     */
+    IGNORE
+}
+
+/**
+ * Defines how to manage the upsert query
+ */
 export type UpsertProps<T extends SchemaDefinition> = {
+    /**
+     * List of key fields that can be origin of a conflict. Snake case
+     */
     upsertFields: (keyof T)[],
+    /**
+     * What do if a conflict occurs. See the `ActionOnConflict` type
+     */
     onConflict: ActionOnConflict
 }
 
+/**
+ * Possible action on a schema field. The only generally available option is actually omitting it
+ */
 export type OverrideActions = "OMIT"
+
+/**
+ * Possible action on a data field. In addition to the generic override actions, we can request to replace the matching field with the actual timestamp on the server
+ */
 export type DateOverrideActions = OverrideActions | "NOW"
+
+/**
+ * Extracts possible actions for a data field depending on its type
+ */
 export type SchemaOverrideActions<T extends Schema> = ExtractFromFacade<T> extends DateS ? DateOverrideActions : OverrideActions;
+
+/**
+ * Defines the list of fields that need a special treatment like omitting them or replacing by the actual timestamp on the database
+ */
 export type FieldsOverride<T extends SchemaDefinition> = {
     [K in keyof T]?: {
         action: SchemaOverrideActions<T[K]>
     }
 }
+
+/**
+ * Extracts the fields that are not overriden by the `FieldsOverride` action
+ */
 export type RecordsWithExclusions<
     T extends SchemaDefinition,
     S extends SchemaTarget<T>,
@@ -24,10 +69,40 @@ export type RecordsWithExclusions<
         [K in keyof S as K extends keyof D ? never : K]: S[K]
     }
 
+/**
+ * Generic well-typed facade for a database connection
+ */
 export interface DatabaseConnection {
+    /**
+     * Client interface. Actually the only possibility is the client interface from the `pg`library
+     */
     client: Client,
+
+    /**
+     * Simply forwards the query to the connected client
+     * @param request SQL query string
+     * @param parameters List of parameters, indexed on the base 1, refered in the query string as `$1`, `$2`, etc...
+     * @returns Query result, as returned by the underlying library
+     */
     query: (request: string, parameters?: any[]) => Promise<QueryResult<any>>,
+
+    /**
+     * Execute a database request and returns an array of objects matching the given schema
+     * @param schema `typizator` schema defining the data type for each returned row
+     * @param query Full SQL query that should return all the fields returned by `schema`. Note that SQL side, the field names are snake case, they are converted to camel case when extracting to Typescript object.
+     * @param parameters Query parameters, indexed on the base 1, refered in the query string as `$1`, `$2`, etc...
+     * @returns Array of Typescript objects with the fields value converted following the `schema` definition
+     */
     typedQuery: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
+
+    /**
+     * Creates a `SELECT` query from the schema's field values
+     * @param schema `typizator` schema used to select table's fields
+     * @param tableAndConditions In the simplest case, just the name of table to select the fields from. Any additional SQL statements going after `FROM <table name>` can be added to it.
+     * @param parameters List of parameters, indexed on the base 1, refered in the query string as `$1`, `$2`, etc...
+     * @param overrides Fields having special treatment like omitting them from the query...
+     * @returns Array of well-typed objects representing the result of the `SELECT` query
+     */
     select: <
         T extends SchemaDefinition,
         D extends FieldsOverride<T> = {}
@@ -37,12 +112,33 @@ export interface DatabaseConnection {
         parameters?: any[],
         overrides?: D
     ) => Promise<SchemaTarget<T>[]>,
+
+    /**
+     * Inserts multiple records to the database in one SQL query.
+     * 
+     * Note that a maxium of 1000 records can be inserted in one request. Better to do much less. 1000 is a lot in most of the cases.
+     * @param schema `typizator` schema describing a single record on the inserted data
+     * @param tableName Name of the table for the insertions
+     * @param records List of records to insert, eventually excluding the fields with default actions defined in `overrides`
+     * @param overrides Fields having special treatment like omitting them from the query...
+     * @returns Just nothing. Its a fire-and-forget action
+     */
     multiInsert: <T extends SchemaDefinition, D extends FieldsOverride<T> = {}>(
         schema: ObjectOrFacadeS<T>,
         tableName: string,
         records: RecordsWithExclusions<T, SchemaTarget<T>, D>[],
         overrides?: D) =>
         Promise<void>,
+
+    /**
+     * 
+     * @param schema 
+     * @param tableName 
+     * @param records 
+     * @param upsertProps 
+     * @param overrides 
+     * @returns 
+     */
     multiUpsert: <T extends SchemaDefinition, D extends FieldsOverride<T> = {}>(
         schema: ObjectOrFacadeS<T>,
         tableName: string,

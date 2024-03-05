@@ -35,10 +35,11 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
             simpleApiS.metadata.implementation.increment,
             (check: SimpleType) => Promise.resolve({ id: check.id + 1n, name: `Incremented ${check.name}` })
         );
+    const helloWorldImpl = (name: string, num: bigint) => Promise.resolve(`${num} greetings to ${name}`)
     const helloWorldHandler =
         handlerImpl(
             simpleApiS.metadata.implementation.helloWorld,
-            (name: string, num: bigint) => Promise.resolve(`${num} greetings to ${name}`)
+            helloWorldImpl
         );
     const doubleArrayHandler =
         handlerImpl(
