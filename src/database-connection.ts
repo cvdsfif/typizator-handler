@@ -166,8 +166,8 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             rowMode: 'array'
         });
         const fields = res.fields.map(field => snakeToCamel(field.name));
-        Array.from(schema.metadata.fields).forEach(
-            ([key, value]) => {
+        schema.metadata.fields.forEach(
+            (key, value) => {
                 if (!value.metadata.optional && !fields.find(fieldKey => fieldKey === key))
                     throw new Error(`Mandatory ${key} field missing from the request data`);
 
@@ -187,9 +187,9 @@ class DatabaseConnectionImpl implements DatabaseConnection {
     };
 
     private fieldsList = <T extends SchemaDefinition, D extends FieldsOverride<T>>(schema: ObjectOrFacadeS<T>, overrides: D) =>
-        Array.from(schema.metadata.fields)
-            .filter(([key]) => overrides[key as string]?.action !== "OMIT")
-            .map(([key]) => camelToSnake(key))
+        schema.metadata.fields
+            .filter(key => overrides[key as string]?.action !== "OMIT")
+            .map(({ key }) => camelToSnake(key))
             .join(",");
 
     select = async <
@@ -208,9 +208,9 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         let counter = 1;
         const nonOmittedFields = schema.metadata.fields.size -
             Object.keys(overrides).filter(key => overrides[key]).length;
-        return `(${Array.from(schema.metadata.fields)
-            .filter(([key]) => overrides[key as string]?.action !== "OMIT")
-            .map(([key]) =>
+        return `(${schema.metadata.fields
+            .filter(key => overrides[key as string]?.action !== "OMIT")
+            .map(({ key }) =>
                 overrides[key as string]?.action === "NOW" ?
                     "now()" :
                     `$${idx * nonOmittedFields + (counter++)}`
@@ -264,9 +264,9 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         (schema: ObjectOrFacadeS<T>, records: RecordsWithExclusions<T, SchemaTarget<T>, D>[], overrides: D) =>
         records
             .map(
-                record => Array.from(schema.metadata.fields)
-                    .filter(([key]) => !overrides[key as string]?.action)
-                    .map(([key]) => (record as any)[key as string])
+                record => schema.metadata.fields
+                    .filter(key => !overrides[key as string]?.action)
+                    .map(({ key }) => (record as any)[key as string])
             )
             .flat();
 
@@ -278,10 +278,10 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         upsertProps: UpsertProps<T>,
         overrides: D
     ) =>
-        Array.from(schema.metadata.fields)
-            .filter(([field]) => !upsertProps.upsertFields.includes(field as string) && overrides[field as string]?.action !== "OMIT")
-            .map(([field]) => {
-                const snakeCaseField = camelToSnake(field);
+        schema.metadata.fields
+            .filter(field => !upsertProps.upsertFields.includes(field as string) && overrides[field as string]?.action !== "OMIT")
+            .map(({ key }) => {
+                const snakeCaseField = camelToSnake(key)
                 return `${snakeCaseField} = EXCLUDED.${snakeCaseField}`
             }).join(",")
 
@@ -293,10 +293,10 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         upsertProps: UpsertProps<T>,
         overrides: D
     ) =>
-        Array.from(schema.metadata.fields)
-            .filter(([field]) => !upsertProps.upsertFields.includes(field as string) && overrides[field as string]?.action !== "OMIT")
-            .map(([field]) => {
-                const snakeCaseField = camelToSnake(field);
+        schema.metadata.fields
+            .filter(field => !upsertProps.upsertFields.includes(field as string) && overrides[field as string]?.action !== "OMIT")
+            .map(({ key }) => {
+                const snakeCaseField = camelToSnake(key);
                 return `${snakeCaseField} = COALESCE(_src.${snakeCaseField},EXCLUDED.${snakeCaseField})`
             }).join(",")
 

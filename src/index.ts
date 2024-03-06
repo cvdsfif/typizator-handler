@@ -9,9 +9,10 @@ export const PING = "@@ping";
 
 export const describeJsonSchema = (schema: Schema<any, any, any>) => {
     return schema.metadata.dataType === "object" ?
-        `{${Array.from((schema.metadata as ObjectMetadata).fields).map(
-            ([key, value]): string => `"${key}":${describeJsonSchema(value)}`
-        )}}` :
+        `{${(schema.metadata as ObjectMetadata).fields.map(
+            (key, value): string => `"${key}":${describeJsonSchema(value)}`
+        )}}`
+        :
         schema.metadata.dataType === "array" ?
             `"${(schema.metadata as ArrayMetadata).elements.metadata.dataType}[]"` :
             `"${schema.metadata.dataType}"`;
@@ -77,8 +78,8 @@ const defaultHandler = <T extends FunctionCallDefinition>(
                 });
             });
     };
-    fn.connectedResources = connectedResources;
-    return fn;
+    fn.connectedResources = connectedResources
+    return fn
 }
 
 /**
