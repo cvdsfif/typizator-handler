@@ -69,7 +69,7 @@ describe("Test interfaces behaviour on a real database", () => {
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("password not available"));
     });
 
-    test("Should raise an exception if the secret is not recovered correctly", async () => {
+    test("Should correctly configure the database", async () => {
         process.env.DB_ENDPOINT_ADDRESS = "http://xxx";
         process.env.DB_NAME = "db";
         process.env.DB_SECRET_ARN = "arn";

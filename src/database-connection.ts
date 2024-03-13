@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { DateS, DefaultBehaviour, ExtractFromFacade, NotNullFacade, ObjectOrFacadeS, ObjectS, Schema, SchemaDefinition, SchemaSource, SchemaTarget } from "typizator";
+import { DateS, ExtractFromFacade, ObjectOrFacadeS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
 import JSONBig from "json-bigint";
 
 /**
@@ -114,14 +114,14 @@ export interface DatabaseConnection {
     ) => Promise<SchemaTarget<T>[]>,
 
     /**
-     * Inserts multiple records to the database in one SQL query.
+     * Inserts multiple records to a database table in one SQL query.
      * 
      * Note that a maxium of 1000 records can be inserted in one request. Better to do much less. 1000 is a lot in most of the cases.
-     * @param schema `typizator` schema describing a single record on the inserted data
-     * @param tableName Name of the table for the insertions
+     * @param schema `typizator` schema describing a single record of the inserted data
+     * @param tableName Name of the table for insertions
      * @param records List of records to insert, eventually excluding the fields with default actions defined in `overrides`
-     * @param overrides Fields having special treatment like omitting them from the query...
-     * @returns Just nothing. Its a fire-and-forget action
+     * @param overrides Fields having special treatment like omitting them from the query or replacing a date with the actual server's timestamp
+     * @returns Just nothing. It's a fire-and-forget action
      */
     multiInsert: <T extends SchemaDefinition, D extends FieldsOverride<T> = {}>(
         schema: ObjectOrFacadeS<T>,
@@ -131,13 +131,17 @@ export interface DatabaseConnection {
         Promise<void>,
 
     /**
+     * Proceeds to upsert of multiple records to a database table in one SQL query.
+     * Upsert means an insert that can react to key records already existing in a table, then either replace them, only fill nulls or ignore
      * 
-     * @param schema 
-     * @param tableName 
-     * @param records 
-     * @param upsertProps 
-     * @param overrides 
-     * @returns 
+     * @param schema `typizator` schema describing a single record of the inserted data
+     * @param tableName Name a table for insertions
+     * @param records List of records to insert, eventually excluding the fields with default actions defined in `overrides`
+     * @param upsertProps Information on how to react on a duplicate record. Contains a list of `upsertFields`, i.e. key fields (camel case)
+     * that can create a duplicate conflict. `onConflict` explains what to do in that case: either replace a record or only replace null fields 
+     * or totally ignore the new data
+     * @param overrides Fields having special treatment like omitting them from the query or replacing a date with the actual server's timestamp
+     * @returns  Just nothing. It's a fire-and-forget action
      */
     multiUpsert: <T extends SchemaDefinition, D extends FieldsOverride<T> = {}>(
         schema: ObjectOrFacadeS<T>,
@@ -148,8 +152,20 @@ export interface DatabaseConnection {
         Promise<void>
 }
 
-export const snakeToCamel = (src: string | String) => src.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
+/**
+ * Utility function changing snake case to camel case
+ * @param src Source string in snake case: something-like-this
+ * @returns String in camel case: somethingLikeThis
+ */
+export const snakeToCamel = (src: string | String) => src.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''))
+
+/**
+ * Utility function changing camel case to snake case
+ * @param src Source string in camel case: somethingLikeThis
+ * @returns String in snake case: something-like-this
+ */
 export const camelToSnake = (src: string | String) => src.replace(/[A-Z]/g, match => `_${match.toLowerCase()}`);
+
 class DatabaseConnectionImpl implements DatabaseConnection {
     constructor(public client: Client) { }
 
@@ -363,4 +379,9 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         Promise<void> => this.multiInsert(schema, tableName, records, overrides, upsertProps);
 };
 
+/**
+ * Creates a database connection facade
+ * @param client `pg` client connected to a PostgreSQL database
+ * @returns facade defined by the `DatabaseConnection` interface
+ */
 export const connectDatabase = (client: Client) => new DatabaseConnectionImpl(client) as DatabaseConnection;
