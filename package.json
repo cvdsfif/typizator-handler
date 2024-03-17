@@ -31,7 +31,7 @@
     "@aws-sdk/client-secrets-manager": "^3.502.0",
     "json-bigint": "^1.0.0",
     "pg": "^8.11.3",
-    "typizator": "^2.3.0"
+    "typizator": "^2.4.0"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^10.6.0",
