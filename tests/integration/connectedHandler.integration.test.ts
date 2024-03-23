@@ -5,7 +5,6 @@ import { HandlerEvent, HandlerResponse } from "../../src/handler-objects";
 
 describe("Test interfaces behaviour on a real database", () => {
     jest.setTimeout(60000);
-    let envSaved: NodeJS.ProcessEnv;
     let getDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>;
     let testClient: any;
 
@@ -21,7 +20,7 @@ describe("Test interfaces behaviour on a real database", () => {
                     SecretString: mockValues.actualSecretString
                 }))
             }))
-        }));
+        }))
         const container = await new PostgreSqlContainer().withReuse().start();
         testClient = new pg.Client({ connectionString: container.getConnectionUri() });
         jest.mock("pg", () => ({
@@ -51,13 +50,16 @@ describe("Test interfaces behaviour on a real database", () => {
         )
     });
 
-    afterAll(async () => await testClient.end());
+    afterAll(async () => await testClient.end())
+
+    let externalEnvironment
 
     beforeEach(async () => {
-        envSaved = process.env
-    });
+        externalEnvironment = {} as any
+        for (const key in process.env) externalEnvironment[key] = process.env[key]
+    })
 
-    afterEach(async () => process.env = envSaved);
+    afterEach(async () => process.env = externalEnvironment!);
 
     test("Should raise an exception if the database access is not configured", async () => {
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));

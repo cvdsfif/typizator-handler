@@ -1,5 +1,5 @@
 import { InferTargetFromSchema, apiS, arrayS, bigintS, objectS, stringS } from "typizator";
-import { PING, handlerImpl } from "../src";
+import { HandlerProps, PING, handlerImpl } from "../src";
 
 describe("Testing the type conversion facade for AWS lambdas", () => {
     const simpleRecordS = objectS({
@@ -87,5 +87,17 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
             .toMatch(/must be an array/);
         expect(JSON.parse((await errorGeneratorHandler({ body: `Wrong body` }) as string)).errorMessage)
             .toMatch(/Unexpected/);
-    });
+    })
+
+    test("Should forward errors report to an error callback", async () => {
+        const errorHandler = jest.fn() as (error: any, props: HandlerProps) => Promise<void>
+        const reportingErrorHandler =
+            handlerImpl(
+                simpleApiS.metadata.implementation.errorGenerator,
+                () => Promise.reject("Custom error"),
+                errorHandler
+            )
+        await reportingErrorHandler({ body: `["mandatory","nullable"]` })
+        expect(errorHandler).toHaveBeenCalledWith("Custom error", {})
+    })
 });

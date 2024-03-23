@@ -36,7 +36,8 @@ export type HandlerProps = {
 const callImplementation = async <T extends FunctionCallDefinition>(
     eventBody: string,
     definition: T,
-    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
+    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
+    props: HandlerProps):
     Promise<string> => {
     let args = [];
     if (definition.args.length > 0) {
@@ -53,7 +54,7 @@ const callImplementation = async <T extends FunctionCallDefinition>(
         })
 
     }
-    return JSONBig.stringify(await implementation(...args as any));
+    return JSONBig.stringify(await implementation(props, ...args as any));
 }
 
 /**
@@ -63,21 +64,32 @@ export enum ConnectedResources { DATABASE = "DATABASE" }
 
 const defaultHandler = <T extends FunctionCallDefinition>(
     definition: T,
-    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
-    connectedResources: ConnectedResources[]):
+    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
+    connectedResources: ConnectedResources[],
+    setupProps: () => Promise<HandlerProps>,
+    teardownProps: (props: HandlerProps) => Promise<void>,
+    errorHandler?: (error: any, props: HandlerProps) => Promise<void>):
     ((event: HandlerEvent) => Promise<HandlerResponse>) => {
     const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
-        return callImplementation(event.body, definition, implementation)
-            .then(retval => ({ data: retval }))
-            .catch(e => {
+        let props = {} as HandlerProps
+        try {
+            props = await setupProps()
+            const callResult = await callImplementation(event.body, definition, implementation, props)
+            return ({ data: callResult })
+        } catch (e: any) {
+            if (errorHandler) await errorHandler(e, props)
+            else {
                 console.error(`Error caught: ${e.message ?? e}`);
                 console.error(e.stack);
-                return JSONBig.stringify({
-                    errorMessage: `Handler error: ${e.message ?? e}`
-                });
-            });
-    };
+            }
+            return JSONBig.stringify({
+                errorMessage: `Handler error: ${e.message ?? e}`
+            })
+        } finally {
+            await teardownProps(props)
+        }
+    }
     fn.connectedResources = connectedResources
     return fn
 }
@@ -86,15 +98,22 @@ const defaultHandler = <T extends FunctionCallDefinition>(
  * Connects a Lambda handler for an API method, without server resources connected
  * @param definition Method defined in an `apiS` schema
  * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
+ * @param errorHandler Optional function that will be called if any error is thrown in the handler's implementation before the normal error treatment
  * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
  */
 export const handlerImpl = <T extends FunctionCallDefinition>(
     definition: T,
-    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
-    ((event: HandlerEvent) => Promise<HandlerResponse>) =>
+    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
+    errorHandler?: (error: any, props: HandlerProps) => Promise<void>):
+    ((event: HandlerEvent,) => Promise<HandlerResponse>) =>
     defaultHandler(
         definition,
-        async (...args: InferArguments<T["args"]>) => await implementation(...args), []);
+        async (_: HandlerProps, ...args: InferArguments<T["args"]>) => await implementation(...args),
+        [],
+        async () => ({}),
+        async (_: HandlerProps) => { },
+        errorHandler
+    )
 
 /**
  * Creates a database connection using the `pg` library from the environment variables.
@@ -132,22 +151,24 @@ export const connectPostgresDb = async () => {
  * Connects a Lambda handler for an API method, without server resources connected
  * @param definition Method defined in an `apiS` schema
  * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
+ * @param errorHandler Optional function that will be called if any error is thrown in the handler's implementation before the normal error treatment
  * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
  */
 export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
     definition: T,
-    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>):
+    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
+    errorHandler?: (error: any, props: HandlerProps) => Promise<void>):
     (event: HandlerEvent) => Promise<HandlerResponse> =>
     defaultHandler(
         definition,
-        async (...args: InferArguments<T["args"]>) => {
-            const client = await connectPostgresDb();
-            try {
-                return await implementation({ db: connectDatabase(client) }, ...args)
-            } finally {
-                await client.end()
-            }
-        }, [ConnectedResources.DATABASE]);
+        implementation,
+        [ConnectedResources.DATABASE],
+        async () => {
+            const client = await connectPostgresDb()
+            return ({ db: connectDatabase(client) })
+        },
+        async (props: HandlerProps) => await props.db?.client.end(),
+        errorHandler)
 
 export { HandlerEvent, HandlerResponse } from "./handler-objects";
 export * from "./database-connection";
