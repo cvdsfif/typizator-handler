@@ -1,4 +1,4 @@
-import { ArrayMetadata, FunctionCallDefinition, InferArguments, InferTargetFromSchema, ObjectMetadata, Schema } from "typizator";
+import { ArrayMetadata, FunctionCallDefinition, FunctionMetadata, InferArguments, InferTargetFromSchema, NamedMetadata, ObjectMetadata, Schema } from "typizator";
 import JSONBig from "json-bigint";
 import { SecretsManager } from "@aws-sdk/client-secrets-manager";
 import { Client } from "pg";
@@ -63,12 +63,12 @@ const callImplementation = async <T extends FunctionCallDefinition>(
 export enum ConnectedResources { DATABASE = "DATABASE" }
 
 const defaultHandler = <T extends FunctionCallDefinition>(
-    definition: T,
+    definition: T & { metadata: FunctionMetadata },
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
     connectedResources: ConnectedResources[],
     setupProps: () => Promise<HandlerProps>,
     teardownProps: (props: HandlerProps) => Promise<void>,
-    errorHandler?: (error: any, props: HandlerProps) => Promise<void>):
+    errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>):
     ((event: HandlerEvent) => Promise<HandlerResponse>) => {
     const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
@@ -78,7 +78,10 @@ const defaultHandler = <T extends FunctionCallDefinition>(
             const callResult = await callImplementation(event.body, definition, implementation, props)
             return ({ data: callResult })
         } catch (e: any) {
-            if (errorHandler) await errorHandler(e, props)
+            if (errorHandler) await errorHandler(e, props, {
+                name: definition.metadata.name,
+                path: definition.metadata.path
+            })
             else {
                 console.error(`Error caught: ${e.message ?? e}`);
                 console.error(e.stack);
@@ -102,10 +105,10 @@ const defaultHandler = <T extends FunctionCallDefinition>(
  * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
  */
 export const handlerImpl = <T extends FunctionCallDefinition>(
-    definition: T,
+    definition: T & { metadata: FunctionMetadata },
     implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
-    errorHandler?: (error: any, props: HandlerProps) => Promise<void>):
-    ((event: HandlerEvent,) => Promise<HandlerResponse>) =>
+    errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>):
+    ((event: HandlerEvent) => Promise<HandlerResponse>) =>
     defaultHandler(
         definition,
         async (_: HandlerProps, ...args: InferArguments<T["args"]>) => await implementation(...args),
@@ -155,9 +158,9 @@ export const connectPostgresDb = async () => {
  * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
  */
 export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
-    definition: T,
+    definition: T & { metadata: FunctionMetadata },
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
-    errorHandler?: (error: any, props: HandlerProps) => Promise<void>):
+    errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>):
     (event: HandlerEvent) => Promise<HandlerResponse> =>
     defaultHandler(
         definition,

@@ -98,6 +98,6 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
                 errorHandler
             )
         await reportingErrorHandler({ body: `["mandatory","nullable"]` })
-        expect(errorHandler).toHaveBeenCalledWith("Custom error", {})
+        expect(errorHandler).toHaveBeenCalledWith("Custom error", {}, { name: "errorGenerator", path: "/errorGenerator" })
     })
 });
