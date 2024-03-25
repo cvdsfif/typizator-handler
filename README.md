@@ -94,6 +94,25 @@ But wait a second. Connection to _what_ database? We didn't seem to have configu
 
 All this is configured automatically if you use the `cdk-typescript-lib` library to integrate all this story with the CDK. Why it is separated from this library? Simply because you don't want your lambdas to know anything about the details of their own deployment via CDK, it's not their concern. All they need are the type conversions, the resources connections and the handlers for that. And this is exactly what this library provides.
 
+### Custom error treatment
+
+Note that you can pass as the third parameter of any handler a function that you can use as an error logger. It will be called on every uncaught exception that can occur in your implementation code:
+
+```ts
+const errorHandler = async (error: any, props: HandlerProps, metadata: NamedMetadata) => {
+    // Your implementation here
+}
+
+handlerImpl(
+    api.metadata.implementation.helloWorld
+    helloWorldImpl,
+    // This function can be shared across your implementations
+    errorHandler
+)
+```
+
+Note that if your handler is a connected one, this function will receive a database connection information in props, so that you can for example record the error information in a table if you need it. The `metadata` parameter receives the name and the API path of the function that have thrown the error.
+
 ### Database connection helpers
 
 As we allow our lambdas to connect to databases (Postgres only for now, but nobody prevents us from adding support to other ones in the near future), it would be good to communicate to that database without the headache given by the fact that SQL and Typescript don't share the same types system and sometimes getting an objects list from an SQL query can be... how to say... unpredictable...
