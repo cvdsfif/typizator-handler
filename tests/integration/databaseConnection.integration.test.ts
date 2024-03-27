@@ -301,7 +301,7 @@ describe("Testing the database type handling tools", () => {
         })
         const sequenceName = "seq"
         const sequenceStart = 100
-        await connection.query(`DROP SEQUENCE ${sequenceName}`)
+        await connection.query(`DROP SEQUENCE IF EXISTS ${sequenceName}`)
         await connection.query(`CREATE SEQUENCE ${sequenceName} START ${sequenceStart}`)
         await connection.multiInsert(testS, "test_table",
             [
