@@ -17,7 +17,12 @@ describe("Testing the database type handling tools", () => {
     afterAll(async () => await connection.client.end());
 
     beforeEach(async () => {
-        await connection.query("CREATE TABLE test_table(id_field DECIMAL PRIMARY KEY,name VARCHAR(255),date_field TIMESTAMPTZ,name2 VARCHAR(255))");
+        await connection.query(`CREATE TABLE test_table(
+            id_field DECIMAL PRIMARY KEY,
+            name VARCHAR(255),
+            date_field TIMESTAMPTZ,
+            name2 VARCHAR(255),
+            compteur INTEGER)`);
     });
 
     afterEach(async () => {
@@ -291,8 +296,13 @@ describe("Testing the database type handling tools", () => {
         const testS = objectS({
             idField: bigintS,
             name: stringS,
-            dateField: dateS.notNull
-        });
+            dateField: dateS.notNull,
+            compteur: intS.notNull
+        })
+        const sequenceName = "seq"
+        const sequenceStart = 100
+        await connection.query(`DROP SEQUENCE ${sequenceName}`)
+        await connection.query(`CREATE SEQUENCE ${sequenceName} START ${sequenceStart}`)
         await connection.multiInsert(testS, "test_table",
             [
                 { idField: 12345678901234567890n },
@@ -300,13 +310,18 @@ describe("Testing the database type handling tools", () => {
             ],
             {
                 name: { action: "OMIT" },
-                dateField: { action: "NOW" }
+                dateField: { action: "NOW" },
+                compteur: {
+                    action: "COUNTER",
+                    sequenceName
+                }
             }
         );
         const fields = await connection.select(testS, "test_table ORDER BY id_field DESC")
         const nowOnServer = await connection.typedQuery(objectS({ isNow: dateS }), "SELECT now() AS is_now", [])
         expect(fields[0].dateField?.getTime()).toBeGreaterThan(nowOnServer[0].isNow!.getTime() - 30000)
-    });
+        expect(fields[0].compteur).toBeGreaterThanOrEqual(sequenceStart)
+    })
 
     test("Should insert multiple rows in a table in a single request omitting and overriding some of them, optional dates allowed", async () => {
         const testS = objectS({

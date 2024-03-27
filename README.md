@@ -193,6 +193,8 @@ In this case, if `testId` is a unique key field, the second call will update the
 
 Instead of `REPLACE`, you can also use `IGNORE` in which case the conflicting updates are simply ignored or `REPLACE_IF_NULL` that only lets update the fields that are null before the upsert call.
 
+Both `multiInsert` and `multiUpsert` accept action definition similar to `"OMIT"` for the `select` function. In addition, you can set the action to `"NOW"` for date fields (it will set the corresponding field to the current server timestamp) and to `"COUNTER"` for number fields, in that case you have to add next to `action` the `sequenceName` field naming the database sequence object that will be used to fill the corresponding field.
+
 ## Tests
 
 I recommend to use the `@testcontainers/postgresql` library to set up database-connected tests in a real environment. To accelerate test suites execution, I recommend to use the jest's `--runInBand` option and set up your tests suites similar to that:

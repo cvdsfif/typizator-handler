@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { DateS, ExtractFromFacade, ObjectOrFacadeS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
+import { BigintS, DateS, ExtractFromFacade, IntS, ObjectOrFacadeS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
 import JSONBig from "json-bigint";
 
 /**
@@ -47,15 +47,38 @@ export type DateOverrideActions = OverrideActions | "NOW"
 /**
  * Extracts possible actions for a data field depending on its type
  */
-export type SchemaOverrideActions<T extends Schema> = ExtractFromFacade<T> extends DateS ? DateOverrideActions : OverrideActions;
+export type SchemaOverrideActions<T extends Schema> =
+    ExtractFromFacade<T> extends DateS ? DateOverrideActions :
+    OverrideActions
+
+/**
+ * General case of action definition
+ */
+export type SimpleActionDefinition<T extends Schema> = {
+    action: SchemaOverrideActions<T>
+}
+
+/**
+ * Action definition for counters
+ */
+export type NumberActionDefinition = {
+    action: "COUNTER",
+    sequenceName: string
+}
+
+/**
+ * Action definition for a single field, used in `FieldsOverride`
+ */
+export type ActionDefinition<T extends Schema> =
+    ExtractFromFacade<T> extends BigintS | IntS ?
+    SimpleActionDefinition<T> | NumberActionDefinition :
+    SimpleActionDefinition<T>
 
 /**
  * Defines the list of fields that need a special treatment like omitting them or replacing by the actual timestamp on the database
  */
 export type FieldsOverride<T extends SchemaDefinition> = {
-    [K in keyof T]?: {
-        action: SchemaOverrideActions<T[K]>
-    }
+    [K in keyof T]?: ActionDefinition<T[K]>
 }
 
 /**
@@ -229,7 +252,9 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             .map(({ key }) =>
                 overrides[key as string]?.action === "NOW" ?
                     "now()" :
-                    `$${idx * nonOmittedFields + (counter++)}`
+                    overrides[key as string]?.action === "COUNTER" ?
+                        `(SELECT nextval('${(overrides[key as string] as NumberActionDefinition)?.sequenceName}'))` :
+                        `$${idx * nonOmittedFields + (counter++)}`
             )
             .join(",")})`
     }
