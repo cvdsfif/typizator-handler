@@ -21,6 +21,7 @@ describe("Testing the database type handling tools", () => {
             id_field DECIMAL PRIMARY KEY,
             name VARCHAR(255),
             date_field TIMESTAMPTZ,
+            date_hour TIMESTAMPTZ,
             name2 VARCHAR(255),
             compteur INTEGER)`);
     });
@@ -297,6 +298,7 @@ describe("Testing the database type handling tools", () => {
             idField: bigintS,
             name: stringS,
             dateField: dateS.notNull,
+            dateHour: dateS.notNull,
             compteur: intS.notNull
         })
         const sequenceName = "seq"
@@ -311,6 +313,10 @@ describe("Testing the database type handling tools", () => {
             {
                 name: { action: "OMIT" },
                 dateField: { action: "NOW" },
+                dateHour: {
+                    action: "FUNCTION",
+                    sql: "date_trunc('hours','2024-04-01 12:20Z'::timestamptz)"
+                },
                 compteur: {
                     action: "COUNTER",
                     sequenceName
@@ -321,6 +327,7 @@ describe("Testing the database type handling tools", () => {
         const nowOnServer = await connection.typedQuery(objectS({ isNow: dateS }), "SELECT now() AS is_now", [])
         expect(fields[0].dateField?.getTime()).toBeGreaterThan(nowOnServer[0].isNow!.getTime() - 30000)
         expect(fields[0].compteur).toBeGreaterThanOrEqual(sequenceStart)
+        expect(fields[0].dateHour.toUTCString()).toEqual(new Date("2024-04-01 12:00Z").toUTCString())
     })
 
     test("Should insert multiple rows in a table in a single request omitting and overriding some of them, optional dates allowed", async () => {

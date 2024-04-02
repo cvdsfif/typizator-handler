@@ -52,11 +52,19 @@ export type SchemaOverrideActions<T extends Schema> =
     OverrideActions
 
 /**
+ * Allows to replace a field by any SQL function
+ */
+export type FunctionActionDefinition = {
+    action: "FUNCTION",
+    sql: string
+}
+
+/**
  * General case of action definition
  */
 export type SimpleActionDefinition<T extends Schema> = {
     action: SchemaOverrideActions<T>
-}
+} | FunctionActionDefinition
 
 /**
  * Action definition for counters
@@ -254,7 +262,9 @@ class DatabaseConnectionImpl implements DatabaseConnection {
                     "now()" :
                     overrides[key as string]?.action === "COUNTER" ?
                         `(SELECT nextval('${(overrides[key as string] as NumberActionDefinition)?.sequenceName}'))` :
-                        `$${idx * nonOmittedFields + (counter++)}`
+                        overrides[key as string]?.action === "FUNCTION" ?
+                            (overrides[key as string] as FunctionActionDefinition)?.sql :
+                            `$${idx * nonOmittedFields + (counter++)}`
             )
             .join(",")})`
     }
