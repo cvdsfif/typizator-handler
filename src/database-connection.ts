@@ -90,6 +90,14 @@ export type FieldsOverride<T extends SchemaDefinition> = {
 }
 
 /**
+ * Defines the list of fields that need a special treatment like omitting them or replacing by the actual timestamp on the database
+ * This is the simplified version for SELECT that doesn't need special actions like "NOW" or "FUNCTION"
+ */
+export type FieldsOverrideForSelect<T extends SchemaDefinition> = {
+    [K in keyof T]?: { action: OverrideActions }
+}
+
+/**
  * Extracts the fields that are not overriden by the `FieldsOverride` action
  */
 export type RecordsWithExclusions<
@@ -136,7 +144,7 @@ export interface DatabaseConnection {
      */
     select: <
         T extends SchemaDefinition,
-        D extends FieldsOverride<T> = {}
+        D extends FieldsOverrideForSelect<T> = {}
     >(
         schema: ObjectOrFacadeS<T>,
         tableAndConditions: string,
