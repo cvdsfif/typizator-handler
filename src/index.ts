@@ -96,12 +96,13 @@ const defaultHandler = <T extends FunctionCallDefinition>(
             const accessRights = {
                 mask: intS.optional.unbox(process.env.ACCESS_MASK)
             }
-            if (securityToken && authenticator && !(await authenticator(props, securityToken, accessRights))) {
-                return {
-                    statusCode: 401,
-                    body: "Unauthorized",
-                    data: ""
-                }
+            if (authenticator && accessRights.mask !== undefined) {
+                if (!securityToken || !(await authenticator(props, securityToken, accessRights)))
+                    return {
+                        statusCode: 401,
+                        body: "Unauthorized",
+                        data: ""
+                    }
             }
             const callResult = await callImplementation(event.body, definition, implementation, props)
             return ({ data: callResult })

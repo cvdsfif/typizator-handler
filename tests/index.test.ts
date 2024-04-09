@@ -178,6 +178,41 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         })
     })
 
+    test("Should not authorize the handler access if the client is not authentified", async () => {
+        // GIVEN the access mask set for the handler and the security token
+        const ACCESS_MASK = 0b1
+        process.env.ACCESS_MASK = `${ACCESS_MASK}`
+
+        // AND the authenticator returns false (unauthorized)
+        const authenticator = jest.fn().mockReturnValue(false)
+
+        // AND a handler is set up
+        const meowFn = jest.fn()
+        const meowHandler =
+            handlerImpl(
+                simpleApiS.metadata.implementation.meow,
+                meowFn,
+                undefined,
+                authenticator
+            )
+
+        // WHEN calling the handler
+        const result = await meowHandler({ body: "Any body" })
+
+        // THEN the authenticator function is called with the right parameters
+        expect(authenticator).not.toHaveBeenCalled()
+
+        // AND the underlying function is not called
+        expect(meowFn).not.toHaveBeenCalled()
+
+        // AND the result of the call reflects the authorization error
+        expect(result).toEqual({
+            statusCode: 401,
+            body: "Unauthorized",
+            data: ""
+        })
+    })
+
     test("Should not authorize the handler access if the IP addresses list doesn't match the client's address", async () => {
         // GIVEN the IP addresses list
         const IP_LIST = ["10.0.0.1"]
