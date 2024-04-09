@@ -59,7 +59,7 @@ describe("Test interfaces behaviour on a real database", () => {
         for (const key in process.env) externalEnvironment[key] = process.env[key]
     })
 
-    afterEach(async () => process.env = externalEnvironment!);
+    afterEach(async () => process.env = externalEnvironment!)
 
     test("Should raise an exception if the database access is not configured", async () => {
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));

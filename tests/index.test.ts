@@ -18,6 +18,15 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         errorGenerator: { args: [stringS.notNull, stringS, stringS.optional] }
     });
 
+    let externalEnvironment
+
+    beforeEach(async () => {
+        externalEnvironment = {} as any
+        for (const key in process.env) externalEnvironment[key] = process.env[key]
+    })
+
+    afterEach(async () => process.env = externalEnvironment!)
+
     const meowHandler =
         handlerImpl(
             simpleApiS.metadata.implementation.meow,
@@ -100,4 +109,122 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         await reportingErrorHandler({ body: `["mandatory","nullable"]` })
         expect(errorHandler).toHaveBeenCalledWith("Custom error", {}, { name: "errorGenerator", path: "/errorGenerator" })
     })
-});
+
+    test("Should authorize the handler access if the access rights match", async () => {
+        // GIVEN the access mask set for the handler and the security token
+        const ACCESS_MASK = 0b1
+        process.env.ACCESS_MASK = `${ACCESS_MASK}`
+        const SECURITY_TOKEN = "Tiktok"
+
+        // AND the authenticator returns true
+        const authenticator = jest.fn().mockReturnValue(true)
+
+        // AND a handler is set up
+        const meowFn = jest.fn().mockReturnValue("Ok")
+        const meowHandler =
+            handlerImpl(
+                simpleApiS.metadata.implementation.meow,
+                meowFn,
+                undefined,
+                authenticator
+            )
+
+        // WHEN calling the handler
+        const result = await meowHandler({ body: "Any body", headers: { "x-security-token": SECURITY_TOKEN } })
+
+        // THEN the authenticator function is called with the right parameters
+        expect(authenticator).toHaveBeenCalledWith({}, SECURITY_TOKEN, { mask: ACCESS_MASK })
+
+        // AND the underlying function is called
+        expect(meowFn).toHaveBeenCalled()
+
+        // AND the result of the call returns the correct value
+        expect(result).toEqual({ "data": "\"Ok\"" })
+    })
+
+    test("Should not authorize the handler access if the access is forbidden", async () => {
+        // GIVEN the access mask set for the handler and the security token
+        const ACCESS_MASK = 0b1
+        process.env.ACCESS_MASK = `${ACCESS_MASK}`
+        const SECURITY_TOKEN = "Tiktok"
+
+        // AND the authenticator returns false (unauthorized)
+        const authenticator = jest.fn().mockReturnValue(false)
+
+        // AND a handler is set up
+        const meowFn = jest.fn()
+        const meowHandler =
+            handlerImpl(
+                simpleApiS.metadata.implementation.meow,
+                meowFn,
+                undefined,
+                authenticator
+            )
+
+        // WHEN calling the handler
+        const result = await meowHandler({ body: "Any body", headers: { "x-security-token": SECURITY_TOKEN } })
+
+        // THEN the authenticator function is called with the right parameters
+        expect(authenticator).toHaveBeenCalledWith({}, SECURITY_TOKEN, { mask: ACCESS_MASK })
+
+        // AND the underlying function is not called
+        expect(meowFn).not.toHaveBeenCalled()
+
+        // AND the result of the call reflects the authorization error
+        expect(result).toEqual({
+            statusCode: 401,
+            body: "Unauthorized",
+            data: ""
+        })
+    })
+
+    test("Should not authorize the handler access if the IP addresses list doesn't match the client's address", async () => {
+        // GIVEN the IP addresses list
+        const IP_LIST = ["10.0.0.1"]
+        process.env.IP_LIST = `${JSON.stringify(IP_LIST)}`
+
+        // AND a handler is set up
+        const meowFn = jest.fn()
+        const meowHandler =
+            handlerImpl(
+                simpleApiS.metadata.implementation.meow,
+                meowFn
+            )
+
+        // WHEN calling the handler
+        const result = await meowHandler({ body: "Any body", headers: { "x-forwarded-for": "10.0.0.2" } })
+
+        // THEN the underlying function is not called
+        expect(meowFn).not.toHaveBeenCalled()
+
+        // AND the result of the call reflects the authorization error
+        expect(result).toEqual({
+            statusCode: 401,
+            body: "Unauthorized",
+            data: ""
+        })
+    })
+
+    test("Should authorize the handler access if the IP addresses list matches the client's address", async () => {
+        // GIVEN the IP addresses list
+        const IP_LIST = ["10.0.0.1"]
+        process.env.IP_LIST = `${JSON.stringify(IP_LIST)}`
+
+        // AND a handler is set up
+        const meowFn = jest.fn().mockReturnValue("Ok")
+        const meowHandler =
+            handlerImpl(
+                simpleApiS.metadata.implementation.meow,
+                meowFn
+            )
+
+        // WHEN calling the handler
+        const result = await meowHandler({ body: "Any body", headers: { "x-forwarded-for": "10.0.0.1" } })
+
+        // THEN the underlying function is called
+        expect(meowFn).toHaveBeenCalled()
+
+        // AND the result of the call reflects the authorization error
+        expect(result).toEqual({ "data": "\"Ok\"" })
+    })
+})
