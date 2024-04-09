@@ -195,6 +195,31 @@ Instead of `REPLACE`, you can also use `IGNORE` in which case the conflicting up
 
 Both `multiInsert` and `multiUpsert` accept action definitions similar to `"OMIT"` for the `select` function. In addition, you can set the action to `"NOW"` for date fields (it will set the corresponding field to the current server timestamp) and to `"COUNTER"` for number fields, in that case you have to add next to `action` the `sequenceName` field naming the database sequence object that will be used to fill the corresponding field. If you want to replace the field value by the result of any other SQL function, use the `"FUNCTION"` action and put the function into the `sql` field.
 
+### Security context
+
+Handlers can be run in a security context driven by the environment parameters.
+
+Setting the `IP_LIST` environment variable for your lambda to the JSON string representing a list of authorized IP addresses (for example, `["10.0.0.1"]`) limits the access to the handler's implementation to those IP addresses only.
+
+Setting the `ACCESS_MASK` lets you implement the access checking function that you pass as the fourth parameter to your `connectedHandlerImpl` or `handlerImpl`. This function takes as arguments the handler's properties (first of all, for the database access), the security token sent by the client and the access rights context containing the number set as the `ACCESS_MASK` environment variable for the lambda. to give a simple example:
+
+```ts
+const authenticator = async (props:HandlerProps, securityToken: string, access: AccessRights) => {
+    // The following call should be implemented by you to check the security token agains the database
+    // and return the numeric mask of access rights that match that token
+    const maskToCheck = await getServerMask(props, securityToken)
+    return (maskToCheck & access.mask) !== 0
+}
+
+handlerImpl(
+    api.metadata.implementation.helloWorld
+    helloWorldImpl,
+    // We don't set the error handler in this example
+    undefined,
+    authenticator
+)
+```
+
 ## Tests
 
 I recommend to use the `@testcontainers/postgresql` library to set up database-connected tests in a real environment. To accelerate test suites execution, I recommend to use the jest's `--runInBand` option and set up your tests suites similar to that:
