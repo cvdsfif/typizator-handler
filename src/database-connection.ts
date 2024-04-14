@@ -420,11 +420,11 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         upsertProps: UpsertProps<T>,
         overrides = {} as D):
         Promise<void> => this.multiInsert(schema, tableName, records, overrides, upsertProps);
-};
+}
 
 /**
  * Creates a database connection facade
  * @param client `pg` client connected to a PostgreSQL database
  * @returns facade defined by the `DatabaseConnection` interface
  */
-export const connectDatabase = (client: Client) => new DatabaseConnectionImpl(client) as DatabaseConnection;
+export const connectDatabase = (client: Client) => new DatabaseConnectionImpl(client) as DatabaseConnection

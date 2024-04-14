@@ -4,6 +4,8 @@ import { SecretsManager } from "@aws-sdk/client-secrets-manager";
 import { Client } from "pg";
 import { HandlerEvent, HandlerResponse } from "./handler-objects";
 import { DatabaseConnection, connectDatabase } from "./database-connection";
+import * as admin from 'firebase-admin'
+import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
 
 export const PING = "@@ping";
 
@@ -21,7 +23,76 @@ export const describeJsonSchema = (schema: Schema<any, any, any>) => {
 export const describeJsonFunction = (definition: FunctionCallDefinition) =>
     `{"args":[${definition.args.map(arg => describeJsonSchema(arg!)).join(",")
     }],"retVal":${definition.retVal ? describeJsonSchema(definition.retVal) : `"void"`
-    }}`;
+    }}`
+
+export type FirebaseAdminConnection = {
+    sendMulticastNotification?: (title: string, body: string, tokens: string[]) => Promise<BatchResponse>
+}
+
+const MAX_FB_PACKET_SIZE = 100
+
+const uninitializedFirebaseConnection = {
+} satisfies FirebaseAdminConnection
+
+const uniqueFirebaseConnection = {
+    sendMulticastNotification: async (title: string, body: string, tokens: string[]): Promise<BatchResponse> => {
+        const filteredTokens = tokens.filter(token => token.trim() !== "")
+        const firebasePromises = [] as Promise<BatchResponse>[]
+        for (let i = 0; i < filteredTokens.length; i += MAX_FB_PACKET_SIZE) {
+            firebasePromises.push(
+                admin.messaging().sendEachForMulticast({
+                    notification: { title, body },
+                    tokens: filteredTokens.slice(i, i + MAX_FB_PACKET_SIZE)
+                }).catch(e => {
+                    console.error(`Firebase packet for [${tokens}] rejected: ${e?.message}`)
+                    return {
+                        successCount: 0,
+                        failureCount: tokens.length,
+                        responses: []
+                    }
+                })
+            )
+        }
+        const result = await Promise.all(firebasePromises)
+        return result.reduce((accumulator, current) => ({
+            successCount: accumulator.successCount + current.successCount,
+            failureCount: accumulator.failureCount + current.failureCount,
+            responses: [...accumulator.responses, ...current.responses ?? []]
+        }), {
+            successCount: 0,
+            failureCount: tokens.length,
+            responses: []
+        })
+    }
+} satisfies FirebaseAdminConnection
+
+const createFirebaseAdminConnection = async () => {
+    const fbSecretArn = process.env.FB_SECRET_ARN
+    const databaseURL = process.env.FB_DATABASE_NAME
+    if (!fbSecretArn || !databaseURL) {
+        console.warn("Firebase secret or database name not specified, connection unavailable")
+        return uninitializedFirebaseConnection
+    }
+    try {
+        if (admin.apps?.length > 0) return uniqueFirebaseConnection
+        const secretString =
+            (await new SecretsManager()
+                .getSecretValue({ SecretId: fbSecretArn }))
+                .SecretString
+        if (!secretString) {
+            console.warn("Firebase secret not found, connection unavailable")
+            return uninitializedFirebaseConnection
+        }
+        admin.initializeApp({
+            credential: admin.credential.cert(JSON.parse(secretString)),
+            databaseURL
+        })
+        return uniqueFirebaseConnection
+    } catch (e: any) {
+        console.error(`Error during Firebase initialization: ${e.message}`)
+        return uninitializedFirebaseConnection
+    }
+}
 
 /**
  * Properties passed to a connected AWS lambda handler
@@ -31,6 +102,10 @@ export type HandlerProps = {
      * If the handler is connected to a database, this is the handler facade allowing to execute queries on that database
      */
     db?: DatabaseConnection
+    /**
+     * If the handler is connected to a Firebase admin channel, this is the object giving access to it
+     */
+    firebaseAdmin?: FirebaseAdminConnection
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -60,7 +135,7 @@ const callImplementation = async <T extends FunctionCallDefinition>(
 /**
  * Types of connected resources. For now only DATABASE is supported
  */
-export enum ConnectedResources { DATABASE = "DATABASE" }
+export enum ConnectedResources { DATABASE = "DATABASE", FIREBASE_ADMIN = "FIREBASE_ADMIN" }
 
 const defaultHandler = <T extends FunctionCallDefinition>(
     definition: T & { metadata: FunctionMetadata },
@@ -224,9 +299,13 @@ export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
  */
 export type ConnectorProperties = {
     /**
-     * If `true`, the underlying lambda will receive in props a connection to a database, configured as described in `connectPostgresDb` function's docs
+     * If `true`, the underlying lambda receives in props prarmeter a connection to a database.
+     * The database connection is created based on the `pg` library and configured with the following environment variables:
+     * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
+     * - DB_NAME is the name of the database to connect to
+     * - DB_SECRET_ARN is the identifier of the AWS Secret containing the password needed to access the database
      */
-    databaseConnected: boolean,
+    databaseConnected?: boolean,
     /**
      * Optional asynchronous function that will be called if any error is thrown in the handler's implementation before the normal error treatment
      * @param error Error object sent by the function context
@@ -241,7 +320,14 @@ export type ConnectorProperties = {
      * @param rights Access rights bitmask set by the lambda's ACCESS_MASK environment variable
      * @returns `true` if the access is authorized, false otherwise
      */
-    authenticator?: (props: HandlerProps, securityToken: string, rights: AccessRights) => Promise<boolean>
+    authenticator?: (props: HandlerProps, securityToken: string, rights: AccessRights) => Promise<boolean>,
+    /**
+     * If `true`, the underlying lambda receives in props parameter an interface allowing to send push messages to mobile applications.
+     * The Firebase connection is configured with the following environment variables:
+     * - FB_SECRET_ARN is the identifier of the AWS Secret containing the certificates necessary to access Firebase
+     * - FB_DATABASE_NAME is the name of the Firebase database that is configured in the Firebase admin panel
+     */
+    firebaseAdminConnected?: boolean
 }
 
 export const lambdaConnector = <T extends FunctionCallDefinition>(
@@ -254,12 +340,18 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     if (props.databaseConnected) {
         connectedResources.push(ConnectedResources.DATABASE)
     }
+    if (props.firebaseAdminConnected) {
+        connectedResources.push(ConnectedResources.FIREBASE_ADMIN)
+    }
 
     const setupProps = async () => {
         const handlerProps = {} as HandlerProps
         if (props.databaseConnected) {
             const client = await connectPostgresDb()
             handlerProps.db = connectDatabase(client)
+        }
+        if (props.firebaseAdminConnected) {
+            handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
         }
         return handlerProps
     }
