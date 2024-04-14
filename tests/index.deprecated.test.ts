@@ -1,7 +1,7 @@
 import { InferTargetFromSchema, apiS, arrayS, bigintS, objectS, stringS } from "typizator";
-import { HandlerProps, PING, handlerImpl, lambdaConnector } from "../src";
+import { HandlerProps, PING, handlerImpl } from "../src";
 
-describe("Testing the type conversion facade for AWS lambdas", () => {
+describe("Testing the type conversion facade for AWS lambdas - deprecated version - will be removed in the next major release", () => {
     const simpleRecordS = objectS({
         id: bigintS.notNull,
         name: stringS.notNull
@@ -28,35 +28,35 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
     afterEach(async () => process.env = externalEnvironment!)
 
     const meowHandler =
-        lambdaConnector(
+        handlerImpl(
             simpleApiS.metadata.implementation.meow,
             () => Promise.resolve("Miaou")
         );
     const noMeowHandler =
-        lambdaConnector(
+        handlerImpl(
             simpleApiS.metadata.implementation.noMeow,
             () => Promise.resolve()
         );
 
     type SimpleType = InferTargetFromSchema<typeof simpleRecordS>;
     const incrementHandler =
-        lambdaConnector(
+        handlerImpl(
             simpleApiS.metadata.implementation.increment,
-            (_: HandlerProps, check: SimpleType) => Promise.resolve({ id: check.id + 1n, name: `Incremented ${check.name}` })
+            (check: SimpleType) => Promise.resolve({ id: check.id + 1n, name: `Incremented ${check.name}` })
         );
-    const helloWorldImpl = (_: HandlerProps, name: string, num: bigint) => Promise.resolve(`${num} greetings to ${name}`)
+    const helloWorldImpl = (name: string, num: bigint) => Promise.resolve(`${num} greetings to ${name}`)
     const helloWorldHandler =
-        lambdaConnector(
+        handlerImpl(
             simpleApiS.metadata.implementation.helloWorld,
             helloWorldImpl
         );
     const doubleArrayHandler =
-        lambdaConnector(
+        handlerImpl(
             simpleApiS.metadata.implementation.doubleArray,
-            (_: HandlerProps, source: string[]) => Promise.resolve([...source, ...source])
+            (source: string[]) => Promise.resolve([...source, ...source])
         );
     const errorGeneratorHandler =
-        lambdaConnector(
+        handlerImpl(
             simpleApiS.metadata.implementation.errorGenerator,
             () => Promise.reject("Custom error")
         )
@@ -101,10 +101,10 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
     test("Should forward errors report to an error callback", async () => {
         const errorHandler = jest.fn() as (error: any, props: HandlerProps) => Promise<void>
         const reportingErrorHandler =
-            lambdaConnector(
+            handlerImpl(
                 simpleApiS.metadata.implementation.errorGenerator,
                 () => Promise.reject("Custom error"),
-                { databaseConnected: false, errorHandler }
+                errorHandler
             )
         await reportingErrorHandler({ body: `["mandatory","nullable"]` })
         expect(errorHandler).toHaveBeenCalledWith("Custom error", {}, { name: "errorGenerator", path: "/errorGenerator" })
@@ -122,10 +122,11 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // AND a handler is set up
         const meowFn = jest.fn().mockReturnValue("Ok")
         const meowHandler =
-            lambdaConnector(
+            handlerImpl(
                 simpleApiS.metadata.implementation.meow,
                 meowFn,
-                { databaseConnected: false, authenticator }
+                undefined,
+                authenticator
             )
 
         // WHEN calling the handler
@@ -153,10 +154,11 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // AND a handler is set up
         const meowFn = jest.fn()
         const meowHandler =
-            lambdaConnector(
+            handlerImpl(
                 simpleApiS.metadata.implementation.meow,
                 meowFn,
-                { databaseConnected: false, authenticator }
+                undefined,
+                authenticator
             )
 
         // WHEN calling the handler
@@ -187,10 +189,11 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // AND a handler is set up
         const meowFn = jest.fn()
         const meowHandler =
-            lambdaConnector(
+            handlerImpl(
                 simpleApiS.metadata.implementation.meow,
                 meowFn,
-                { databaseConnected: false, authenticator }
+                undefined,
+                authenticator
             )
 
         // WHEN calling the handler
@@ -221,10 +224,11 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // AND a handler is set up
         const meowFn = jest.fn()
         const meowHandler =
-            lambdaConnector(
+            handlerImpl(
                 simpleApiS.metadata.implementation.meow,
                 meowFn,
-                { databaseConnected: false, authenticator }
+                undefined,
+                authenticator
             )
 
         // WHEN calling the handler
@@ -252,7 +256,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // AND a handler is set up
         const meowFn = jest.fn()
         const meowHandler =
-            lambdaConnector(
+            handlerImpl(
                 simpleApiS.metadata.implementation.meow,
                 meowFn
             )
@@ -279,7 +283,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // AND a handler is set up
         const meowFn = jest.fn().mockReturnValue("Ok")
         const meowHandler =
-            lambdaConnector(
+            handlerImpl(
                 simpleApiS.metadata.implementation.meow,
                 meowFn
             )

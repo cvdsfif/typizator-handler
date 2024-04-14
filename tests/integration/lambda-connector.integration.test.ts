@@ -41,14 +41,15 @@ describe("Test interfaces behaviour on a real database", () => {
         type HandlerProps = {
             db?: DatabaseConnection
         }
-        getDataHandler = handlers.connectedHandlerImpl(
+        getDataHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 const result = await props.db!.client.query("SELECT 1 as one");
                 return result.rows[0].one;
-            }
+            },
+            { databaseConnected: true }
         )
-    });
+    })
 
     afterAll(async () => await testClient.end())
 
@@ -69,7 +70,7 @@ describe("Test interfaces behaviour on a real database", () => {
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));
         process.env.DB_SECRET_ARN = "arn";
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("password not available"));
-    });
+    })
 
     test("Should correctly configure the database", async () => {
         process.env.DB_ENDPOINT_ADDRESS = "http://xxx";
@@ -88,9 +89,9 @@ describe("Test interfaces behaviour on a real database", () => {
                     rejectUnauthorized: false
                 }
             }]);
-    });
+    })
 
     test("Should expose database as connected resource for the appropriate handlers", async () => {
         expect((getDataHandler as any).connectedResources).toEqual(["DATABASE"]);
-    });
-});
+    })
+})

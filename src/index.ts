@@ -131,8 +131,9 @@ const defaultHandler = <T extends FunctionCallDefinition>(
  * @param definition Method defined in an `apiS` schema
  * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
  * @param errorHandler Optional function that will be called if any error is thrown in the handler's implementation before the normal error treatment
-* @param authenticator Optional function that checks the authentication token sent from the client in the X-Security-Token against the authentication parameters that are passed in the argument and forbids the access to the underlying implementation if the function returns false
+ * @param authenticator Optional function that checks the authentication token sent from the client in the X-Security-Token against the authentication parameters that are passed in the argument and forbids the access to the underlying implementation if the function returns false
  * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
+ * @deprecated Replaced by a more flexible `lambdaConnector`
  */
 export const handlerImpl = <T extends FunctionCallDefinition>(
     definition: T & { metadata: FunctionMetadata },
@@ -199,6 +200,7 @@ export type AccessRights = {
  * @param errorHandler Optional function that will be called if any error is thrown in the handler's implementation before the normal error treatment
  * @param authenticator Optional function that checks the authentication token sent from the client in the X-Security-Token against the authentication parameters that are passed in the argument and forbids the access to the underlying implementation if the function returns false
  * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
+ * @deprecated Replaced by a more flexible `lambdaConnector`
  */
 export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
     definition: T & { metadata: FunctionMetadata },
@@ -217,5 +219,66 @@ export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
         async (props: HandlerProps) => await props.db?.client.end(),
         errorHandler, authenticator)
 
-export { HandlerEvent, HandlerResponse } from "./handler-objects";
-export * from "./database-connection";
+/**
+ * Properties defining what and how will be injected into the lambda handler
+ */
+export type ConnectorProperties = {
+    /**
+     * If `true`, the underlying lambda will receive in props a connection to a database, configured as described in `connectPostgresDb` function's docs
+     */
+    databaseConnected: boolean,
+    /**
+     * Optional asynchronous function that will be called if any error is thrown in the handler's implementation before the normal error treatment
+     * @param error Error object sent by the function context
+     * @param props Handler properties (including an eventual database connection) passed to the handler
+     * @param metadata Metadata indicating the context of the function that raised the error
+     */
+    errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>,
+    /**
+     * Optional function that checks the authentication token provided by the client against the access rights set by the lambda's environment
+     * @param props Handler properties (including an eventual database connection) passed to the handler
+     * @param securityToken Receives the token sent by the client in the x-security-token header
+     * @param rights Access rights bitmask set by the lambda's ACCESS_MASK environment variable
+     * @returns `true` if the access is authorized, false otherwise
+     */
+    authenticator?: (props: HandlerProps, securityToken: string, rights: AccessRights) => Promise<boolean>
+}
+
+export const lambdaConnector = <T extends FunctionCallDefinition>(
+    definition: T & { metadata: FunctionMetadata },
+    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
+    props = { databaseConnected: false } as ConnectorProperties
+): (event: HandlerEvent) => Promise<HandlerResponse> => {
+    const connectedResources = [] as ConnectedResources[]
+
+    if (props.databaseConnected) {
+        connectedResources.push(ConnectedResources.DATABASE)
+    }
+
+    const setupProps = async () => {
+        const handlerProps = {} as HandlerProps
+        if (props.databaseConnected) {
+            const client = await connectPostgresDb()
+            handlerProps.db = connectDatabase(client)
+        }
+        return handlerProps
+    }
+
+    const teardownProps = async (handlerProps: HandlerProps) => {
+        if (props.databaseConnected) await handlerProps.db?.client.end()
+    }
+
+    return defaultHandler(
+        definition,
+        implementation,
+        connectedResources,
+        setupProps,
+        teardownProps,
+        props.errorHandler,
+        props.authenticator
+    )
+}
+
+
+export { HandlerEvent, HandlerResponse } from "./handler-objects"
+export * from "./database-connection"
