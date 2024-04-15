@@ -57,7 +57,7 @@ const uniqueFirebaseConnection = {
         return result.reduce((accumulator, current) => {
             if (current.failureCount > 0) {
                 console.warn(`Failures when sending Firebase messages`)
-                current.responses.forEach(response => {
+                current.responses?.forEach(response => {
                     if (response.success) return
                     console.warn(`Failure for message ${response.messageId} : ${response.error?.code}/${response.error?.message}`)
                 })

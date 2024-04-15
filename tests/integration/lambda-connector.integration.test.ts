@@ -108,7 +108,15 @@ describe("Test interfaces behaviour on a real database", () => {
         for (const key in process.env) externalEnvironment[key] = process.env[key]
         sendForMulticastMock.mockImplementation(() => Promise.resolve({
             successCount: 1,
-            failureCount: 1
+            failureCount: 1,
+            responses: [{
+                success: false,
+                messageId: 1,
+                error: {
+                    message: "Err",
+                    code: 1
+                }
+            }, { success: true }]
         }))
         initializedFirebaseApps.splice(0, initializedFirebaseApps.length)
     })
@@ -191,6 +199,32 @@ describe("Test interfaces behaviour on a real database", () => {
         expect((fbConnectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
             "FIREBASE_ADMIN"
         ]))
+    })
+
+    test("Should acknowledge sending success", async () => {
+        // GIVEN the environment variables are correctly configured
+        process.env.FB_SECRET_ARN = "fbarn"
+        process.env.FB_DATABASE_NAME = "fbdb"
+
+        // AND some secret object is returned by the secrets manager and the certificate mock returns some value
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        certMock.mockReturnValue("cert")
+
+        // AND a standard handler is connected
+        connectStandardFbHandler()
+
+        // AND sending reports success
+        sendForMulticastMock.mockImplementation(() => Promise.resolve({
+            successCount: 1,
+            failureCount: 0,
+            responses: [{ success: true }]
+        }))
+
+        // WHEN calling the connected handler
+        const data = await fbConnectedHandler({ body: "" })
+
+        // THEN it correctly returns
+        expect(data).toEqual({ data: "1" })
     })
 
     test("Should ignore empty push tokens", async () => {
