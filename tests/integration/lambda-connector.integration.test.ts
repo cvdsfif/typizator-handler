@@ -227,6 +227,31 @@ describe("Test interfaces behaviour on a real database", () => {
         expect(data).toEqual({ data: "1" })
     })
 
+    test("Should acknowledge sending success with empty response list", async () => {
+        // GIVEN the environment variables are correctly configured
+        process.env.FB_SECRET_ARN = "fbarn"
+        process.env.FB_DATABASE_NAME = "fbdb"
+
+        // AND some secret object is returned by the secrets manager and the certificate mock returns some value
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        certMock.mockReturnValue("cert")
+
+        // AND a standard handler is connected
+        connectStandardFbHandler()
+
+        // AND sending reports success
+        sendForMulticastMock.mockImplementation(() => Promise.resolve({
+            successCount: 1,
+            failureCount: 0
+        }))
+
+        // WHEN calling the connected handler
+        const data = await fbConnectedHandler({ body: "" })
+
+        // THEN it correctly returns
+        expect(data).toEqual({ data: "1" })
+    })
+
     test("Should ignore empty push tokens", async () => {
         // GIVEN the environment variables are correctly configured
         process.env.FB_SECRET_ARN = "fbarn"
