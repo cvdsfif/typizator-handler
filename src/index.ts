@@ -54,11 +54,20 @@ const uniqueFirebaseConnection = {
             )
         }
         const result = await Promise.all(firebasePromises)
-        return result.reduce((accumulator, current) => ({
-            successCount: accumulator.successCount + current.successCount,
-            failureCount: accumulator.failureCount + current.failureCount,
-            responses: [...accumulator.responses, ...current.responses ?? []]
-        }), {
+        return result.reduce((accumulator, current) => {
+            if (current.failureCount > 0) {
+                console.warn(`Failures when sending Firebase messages`)
+                current.responses.forEach(response => {
+                    if (response.success) return
+                    console.warn(`Failure for message ${response.messageId} : ${response.error?.code}/${response.error?.message}`)
+                })
+            } else console.log(`Successfully sent ${current.successCount} messages`)
+            return ({
+                successCount: accumulator.successCount + current.successCount,
+                failureCount: accumulator.failureCount + current.failureCount,
+                responses: [...accumulator.responses, ...current.responses ?? []]
+            })
+        }, {
             successCount: 0,
             failureCount: tokens.length,
             responses: []
