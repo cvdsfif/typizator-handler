@@ -286,6 +286,41 @@ describe("Test interfaces behaviour on a real database", () => {
         }))
     })
 
+    test("Should correctly count failures", async () => {
+        // GIVEN the environment variables are correctly configured
+        process.env.FB_SECRET_ARN = "fbarn"
+        process.env.FB_DATABASE_NAME = "fbdb"
+
+        // AND some secret object is returned by the secrets manager and the certificate mock returns some value
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        certMock.mockReturnValue("cert")
+
+        // AND sending reports success
+        sendForMulticastMock.mockImplementation(() => Promise.resolve({
+            successCount: 1,
+            failureCount: 0
+        }))
+
+        // AND the connected handler returns a list with an empty token
+        fbConnectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                return (
+                    await props.firebaseAdmin?.sendMulticastNotification?.(messageTitle, messageSent, ["t1", "t2"])
+                )?.failureCount
+            },
+            {
+                firebaseAdminConnected: true
+            }
+        )
+
+        // WHEN calling the connected handler
+        const data = await fbConnectedHandler({ body: "" })
+
+        // THEN it correctly returns
+        expect(data).toEqual({ data: "0" })
+    })
+
     test("Should tolerate google notifications fckups", async () => {
         // GIVEN the environment variables are correctly configured
         process.env.FB_SECRET_ARN = "fbarn"

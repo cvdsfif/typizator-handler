@@ -69,7 +69,7 @@ const uniqueFirebaseConnection = {
             })
         }, {
             successCount: 0,
-            failureCount: tokens.length,
+            failureCount: 0,
             responses: []
         })
     }
