@@ -278,7 +278,7 @@ export type AccessRights = {
 }
 
 /**
- * Connects a Lambda handler for an API method, without server resources connected
+ * Connects a Lambda handler for an API method, with server resources connected
  * @param definition Method defined in an `apiS` schema
  * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
  * @param errorHandler Optional function that will be called if any error is thrown in the handler's implementation before the normal error treatment

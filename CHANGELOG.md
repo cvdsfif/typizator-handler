@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 2.0.0-beta.1 - 2024-04-15
 
+### Added
+- Shortcut parameters for `lambdaConnector`
+
 ## 2.0.0-beta.0 - 2024-04-14
 Firebase admin connection support
 
