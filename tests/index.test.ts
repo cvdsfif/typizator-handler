@@ -5,7 +5,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
     const simpleRecordS = objectS({
         id: bigintS.notNull,
         name: stringS.notNull
-    }).notNull;
+    }).notNull
     const simpleApiS = apiS({
         meow: { args: [], retVal: stringS.notNull },
         noMeow: { args: [] },
@@ -16,7 +16,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         increment: { args: [simpleRecordS], retVal: simpleRecordS },
         doubleArray: { args: [arrayS(stringS.notNull).notNull], retVal: arrayS(stringS.notNull).notNull },
         errorGenerator: { args: [stringS.notNull, stringS, stringS.optional] }
-    });
+    })
 
     let externalEnvironment
 
@@ -31,30 +31,30 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         lambdaConnector(
             simpleApiS.metadata.implementation.meow,
             () => Promise.resolve("Miaou")
-        );
+        )
     const noMeowHandler =
         lambdaConnector(
             simpleApiS.metadata.implementation.noMeow,
             () => Promise.resolve()
-        );
+        )
 
-    type SimpleType = InferTargetFromSchema<typeof simpleRecordS>;
+    type SimpleType = InferTargetFromSchema<typeof simpleRecordS>
     const incrementHandler =
         lambdaConnector(
             simpleApiS.metadata.implementation.increment,
             (_: HandlerProps, check: SimpleType) => Promise.resolve({ id: check.id + 1n, name: `Incremented ${check.name}` })
-        );
+        )
     const helloWorldImpl = (_: HandlerProps, name: string, num: bigint) => Promise.resolve(`${num} greetings to ${name}`)
     const helloWorldHandler =
         lambdaConnector(
             simpleApiS.metadata.implementation.helloWorld,
             helloWorldImpl
-        );
+        )
     const doubleArrayHandler =
         lambdaConnector(
             simpleApiS.metadata.implementation.doubleArray,
             (_: HandlerProps, source: string[]) => Promise.resolve([...source, ...source])
-        );
+        )
     const errorGeneratorHandler =
         lambdaConnector(
             simpleApiS.metadata.implementation.errorGenerator,
