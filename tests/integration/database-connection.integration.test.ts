@@ -1,7 +1,7 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { ActionOnConflict, DatabaseConnection, connectDatabase } from "../../src/database-connection";
-import { bigintS, boolS, dateS, intS, objectS, stringS } from "typizator";
+import { SchemaTarget, bigintS, boolS, dateS, intS, objectS, stringS } from "typizator";
 
 describe("Testing the database type handling tools", () => {
     jest.setTimeout(60000);
@@ -35,6 +35,17 @@ describe("Testing the database type handling tools", () => {
         const result = (await connection.query("SELECT name FROM test_table WHERE id_field = $1", [2])).rows
         expect(result.length).toEqual(1)
         expect(result[0].name).toEqual("two")
+    })
+
+    test("Should return a flat array from one-field query", async () => {
+        // GIVEN some data in the table
+        await connection.query("INSERT INTO test_table(id_field) VALUES (1),(2)")
+
+        // WHEN querying the table for a primitive-type values
+        const result = await connection.typedQuery(bigintS, "SELECT id_field FROM test_table ORDER BY id_field")
+
+        // THEN an array of primitives is returned
+        expect(result).toEqual([1n, 2n])
     })
 
     test("Should extract defined type array from the database query", async () => {

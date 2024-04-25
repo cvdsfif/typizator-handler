@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+Primitive types now accepted by `typedQuery`
+
+### Added 
+- Stable version of Firebase admin connectivity
+
+### Changed
+- `handlerImpl` and `connectedHandlerImpl` are now deprecated. They are replaced by a more flexible `connectLambda`
 
 ## 2.1.0-beta.0 - 2024-04-22
 

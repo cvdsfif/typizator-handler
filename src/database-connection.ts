@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { BigintS, DateS, ExtractFromFacade, IntS, ObjectOrFacadeS, Schema, SchemaDefinition, SchemaTarget } from "typizator";
+import { BigintS, BoolS, DateS, DefaultBehaviour, ExtendedSchema, ExtractFromFacade, FloatS, IntS, NotNullFacade, ObjectOrFacadeS, Schema, SchemaDefinition, SchemaSource, SchemaTarget, StringS } from "typizator";
 import JSONBig from "json-bigint";
 
 /**
@@ -132,7 +132,10 @@ export interface DatabaseConnection {
      * @param parameters Query parameters, indexed on the base 1, refered in the query string as `$1`, `$2`, etc...
      * @returns Array of Typescript objects with the fields value converted following the `schema` definition
      */
-    typedQuery: <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters?: any[]) => Promise<SchemaTarget<T>[]>,
+    typedQuery: <T extends SchemaDefinition>(
+        schema: ObjectOrFacadeS<T> | BigintS | StringS | DateS | IntS | BoolS | FloatS,
+        query: string, parameters?:
+            any[]) => Promise<SchemaTarget<T>[]>,
 
     /**
      * Creates a `SELECT` query from the schema's field values
@@ -214,32 +217,38 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             values: parameters
         });
 
-    typedQuery = async <T extends SchemaDefinition>(schema: ObjectOrFacadeS<T>, query: string, parameters = [] as any[]): Promise<SchemaTarget<T>[]> => {
+    typedQuery = async <T extends SchemaDefinition>(
+        schemaSource: ObjectOrFacadeS<T> | BigintS | StringS | DateS | IntS | BoolS | FloatS,
+        query: string, parameters = [] as any[]
+    ): Promise<SchemaTarget<T>[]> => {
         const res = await this.client.query({
             text: query,
             values: parameters,
             rowMode: 'array'
-        });
-        const fields = res.fields.map(field => snakeToCamel(field.name));
-        schema.metadata.fields.forEach(
-            (key, value) => {
-                if (!value.metadata.optional && !fields.find(fieldKey => fieldKey === key))
-                    throw new Error(`Mandatory ${key} field missing from the request data`);
-
-            }
-        );
-        return res.rows.map(row => {
-            const retval = {} as SchemaTarget<T>;
-            fields.forEach((name, idx) => {
-                try {
-                    (retval as any)[name] = schema.metadata.fields.get(name)?.unbox(row[idx]);
-                } catch (e: any) {
-                    throw new Error(`Unboxing ${name}: ${e.message}`);
+        })
+        if (schemaSource.metadata.dataType === "object") {
+            const schema = schemaSource as ObjectOrFacadeS<T>
+            const fields = res.fields.map(field => snakeToCamel(field.name))
+            schema.metadata.fields.forEach(
+                (key, value) => {
+                    if (!value.metadata.optional && !fields.find(fieldKey => fieldKey === key))
+                        throw new Error(`Mandatory ${key} field missing from the request data`)
                 }
-            });
-            return retval;
-        });
-    };
+            )
+            return res.rows.map(row => {
+                const retval = {} as SchemaTarget<T>
+                fields.forEach((name, idx) => {
+                    try {
+                        (retval as any)[name] = schema.metadata.fields.get(name)?.unbox(row[idx])
+                    } catch (e: any) {
+                        throw new Error(`Unboxing ${name}: ${e.message}`)
+                    }
+                })
+                return retval
+            })
+        }
+        return res.rows.map(row => schemaSource.unbox(row[0]) as SchemaTarget<T>)
+    }
 
     private fieldsList = <T extends SchemaDefinition, D extends FieldsOverride<T>>(schema: ObjectOrFacadeS<T>, overrides: D) =>
         schema.metadata.fields

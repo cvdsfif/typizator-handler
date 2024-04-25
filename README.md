@@ -47,7 +47,7 @@ In the microservices logic it's good to implement each function of the interface
 ```ts
 export const helloWorld = 
     // This is the function from this library
-    handlerImpl(
+    lambdaConnector(
         // We take the endpoint schema from the API we defined earlier. It ensures type checks and conversions
         api.metadata.implementation.helloWorld
         // This is the name of the implementation function. Typescript will only allow arguments and returned types defined by the endpoint schema
@@ -55,10 +55,10 @@ export const helloWorld =
     )
 ```
 
-The implementation can be whatever you want, but it has to match the signature defined by the schema:
+The implementation can be whatever you want, but it has to match the signature defined by the schema (the first argument is not used if you don't have any connected resources):
 
 ```ts
-const helloWorldImpl = async (arg:string) : Promise<string> => {
+const helloWorldImpl = async (_:HandlerProps, arg:string) : Promise<string> => {
     // Your implementation here
 }
 ```
@@ -68,11 +68,13 @@ It becomes even more interesting if you want to connect a Postgres database (sit
 ```ts
 export const helloWorld = 
     // This is the other function from this library
-    connectedHandlerImpl(
+    lambdaConnector(
         // We take the endpoint schema from the API we defined earlier. It ensures type checks and conversions
         api.metadata.implementation.helloWorld
         // This is the name of the implementation function. Typescript will only allow arguments and returned types defined by the endpoint schema
-        helloWorldImpl
+        helloWorldImpl,
+        // This tells the connector that it needs to inject the active database connection to the handler
+        { databaseConnected: true }
     )
 ```
 
@@ -103,15 +105,44 @@ const errorHandler = async (error: any, props: HandlerProps, metadata: NamedMeta
     // Your implementation here
 }
 
-handlerImpl(
+lambdaConnector(
     api.metadata.implementation.helloWorld
     helloWorldImpl,
-    // This function can be shared across your implementations
-    errorHandler
+    {
+        databaseConnection: false,
+        // This function can be shared across your implementations
+        errorHandler
+    }
 )
 ```
 
 Note that if your handler is a connected one, this function will receive a database connection information in props, so that you can for example record the error information in a table if you need it. The `metadata` parameter receives the name and the API path of the function that have thrown the error.
+
+### Firebase admin connector
+
+If your application needs to send push notifications to your mobile apps with Firebase, you can do it by requesting the connection to Firebase to be injected into your handler. You just have to do this:
+
+```ts
+lambdaConnector(
+    api.metadata.implementation.helloWorld
+    helloWorldImpl,
+    {
+        firebaseAdminConnected: true
+    }
+)
+```
+
+In that case, your handler receives the connector object in `HandlerProps` and you can call it in your lambda when you need to send push messages:
+
+```ts
+await props.firebaseAdmin?.sendMulticastNotification?.(
+    "Message title", 
+    "Message body", 
+    // List of push tokens you receive from your client applications
+    [TOKEN1, TOKEN2])
+```
+
+The function returns a standard `BatchResponse` that you can use as specified in Firebase documentation.
 
 ### Database connection helpers
 
@@ -160,6 +191,8 @@ connection.select(testTableS, "test_table", [], { testName: { action: "OMIT" }})
 
 A variation of this method is the `typedQuery`. The only difference between them is that `typedQuery` doesn't create the `SELECT` statement on the fly, it requires the full SQL query as the second argument. The first argument is still the `typizator` schema definition, we need it to correctly type the rows returned from the query.
 
+For `typedQuery` it is possible to pass a primitive (like `stringS`) as a first argument, in that case we suppose that the query result will have one column (the other eventual columns are ignored) and it will return the array of primitives of a corresponding target type of the schema.
+
 The `multiInsert` function allows to insert (in one query) up to 1000 rows to the table at the same time. For example:
 
 ```ts
@@ -201,7 +234,7 @@ Handlers can be run in a security context driven by the environment parameters.
 
 Setting the `IP_LIST` environment variable for your lambda to the JSON string representing a list of authorized IP addresses (for example, `["10.0.0.1"]`) limits the access to the handler's implementation to those IP addresses only.
 
-Setting the `ACCESS_MASK` lets you implement the access checking function that you pass as the fourth parameter to your `connectedHandlerImpl` or `handlerImpl`. This function takes as arguments the handler's properties (first of all, for the database access), the security token sent by the client and the access rights context containing the number set as the `ACCESS_MASK` environment variable for the lambda. to give a simple example:
+Setting the `ACCESS_MASK` lets you implement the access checking function that you pass in the properties to your `lambdaConnector`. This function takes as arguments the handler's properties (first of all, for the database access), the security token sent by the client and the access rights context containing the number set as the `ACCESS_MASK` environment variable for the lambda. to give a simple example:
 
 ```ts
 const authenticator = async (props:HandlerProps, securityToken: string, access: AccessRights) => {
@@ -211,12 +244,13 @@ const authenticator = async (props:HandlerProps, securityToken: string, access: 
     return (maskToCheck & access.mask) !== 0
 }
 
-handlerImpl(
+lambdaConnector(
     api.metadata.implementation.helloWorld
     helloWorldImpl,
-    // We don't set the error handler in this example
-    undefined,
-    authenticator
+    {
+        databaseConnected:false,
+        authenticator
+    }
 )
 ```
 
