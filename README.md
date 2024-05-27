@@ -139,7 +139,10 @@ await props.firebaseAdmin?.sendMulticastNotification?.(
     "Message title", 
     "Message body", 
     // List of push tokens you receive from your client applications
-    [TOKEN1, TOKEN2])
+    [TOKEN1, TOKEN2],
+    // Optional link to follow when the end user clicks on the push notification
+    "http://www.destination.com"
+    )
 ```
 
 The function returns a standard `BatchResponse` that you can use as specified in Firebase documentation.

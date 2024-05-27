@@ -26,7 +26,7 @@ describe("Test interfaces behaviour on a real database", () => {
         client: pg.Client
     }
     type FirebaseAdminConnection = {
-        sendMulticastNotification?: (title: string, body: string, tokens: string[]) => Promise<BatchResponse>
+        sendMulticastNotification?: (title: string, body: string, tokens: string[], link?: string) => Promise<BatchResponse>
     }
     type HandlerProps = {
         db?: DatabaseConnection,
@@ -463,5 +463,66 @@ describe("Test interfaces behaviour on a real database", () => {
 
         // AND a call is made for a group notification
         expect(sendForMulticastMock).not.toHaveBeenCalled()
+    })
+
+    test("Should correctly send Firebase notifications with Android links", async () => {
+        // GIVEN the environment variables are correctly configured
+        process.env.FB_SECRET_ARN = "fbarn"
+        process.env.FB_DATABASE_NAME = "fbdb"
+
+        // AND some secret object is returned by the secrets manager and the certificate mock returns some value
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        certMock.mockReturnValue("cert")
+
+        // AND a standard handler is connected and configured to send Android links with the package
+        fbConnectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                await props.firebaseAdmin?.sendMulticastNotification?.(messageTitle, messageSent, ["t1", "t2"], "http://link")
+                return 1;
+            },
+            {
+                firebaseAdminConnected: true
+            }
+        )
+
+        // WHEN calling the connected handler
+        const data = await fbConnectedHandler({ body: "" })
+
+        // THEN it correctly returns
+        expect(data).toEqual({ data: "1" })
+
+        // AND Firebase is correctly initialized
+        expect(certMock).toHaveBeenCalledWith(JSON.parse(mockValues.actualSecretString))
+        expect(initializeAppMock).toHaveBeenCalledWith({ credential: "cert", databaseURL: "fbdb" })
+
+        // AND a call is made for a group notification
+        expect(sendForMulticastMock).toHaveBeenCalledWith(expect.objectContaining({
+            notification: {
+                title: messageTitle,
+                body: messageSent
+            },
+            data: {
+                meta: "root data",
+                click_action: "http://link"
+            },
+            android: {
+                data: {
+                    meta: "android data",
+                    click_action: "http://link"
+                },
+                notification: {
+                    title: messageTitle,
+                    body: messageSent,
+                    clickAction: "http://link"
+                }
+            },
+            tokens
+        }))
+
+        // AND the handler is marked as having a firebase connection
+        expect((fbConnectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
+            "FIREBASE_ADMIN"
+        ]))
     })
 })

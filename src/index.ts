@@ -9,6 +9,11 @@ import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
 
 export const PING = "@@ping";
 
+/**
+ * Describes the data schema in a human-readable JSON-like form.
+ * @param schema Schema to describe
+ * @returns A string representing the schema detailed data type
+ */
 export const describeJsonSchema = (schema: Schema<any, any, any>) => {
     return schema.metadata.dataType === "object" ?
         `{${(schema.metadata as ObjectMetadata).fields.map(
@@ -20,13 +25,29 @@ export const describeJsonSchema = (schema: Schema<any, any, any>) => {
             `"${schema.metadata.dataType}"`;
 }
 
+/**
+ * Describes the function schema in a human-readable JSON-like form
+ * @param schema Function schema to describe
+ * @returns A string representing the detailed data types of the function arguments and return values
+ */
 export const describeJsonFunction = (definition: FunctionCallDefinition) =>
     `{"args":[${definition.args.map(arg => describeJsonSchema(arg!)).join(",")
     }],"retVal":${definition.retVal ? describeJsonSchema(definition.retVal) : `"void"`
     }}`
 
+/**
+ * Connection interface for Firebase provided to the handler
+ */
 export type FirebaseAdminConnection = {
-    sendMulticastNotification?: (title: string, body: string, tokens: string[]) => Promise<BatchResponse>
+    /**
+     * Sends a push notification through Firebase
+     * @param title Notification title
+     * @param body Notification body
+     * @param tokens Push tokens (to get from the client app) to send the messages to
+     * @param link Optional link that will be followed if the end user clicks on the push notification
+     * @returns Information about success or failure of sending the messages
+     */
+    sendMulticastNotification?: (title: string, body: string, tokens: string[], link?: string) => Promise<BatchResponse>
 }
 
 const MAX_FB_PACKET_SIZE = 100
@@ -35,15 +56,37 @@ const uninitializedFirebaseConnection = {
 } satisfies FirebaseAdminConnection
 
 const uniqueFirebaseConnection = {
-    sendMulticastNotification: async (title: string, body: string, tokens: string[]): Promise<BatchResponse> => {
+    sendMulticastNotification: async (title: string, body: string, tokens: string[], link = undefined as string | undefined): Promise<BatchResponse> => {
         const filteredTokens = tokens.filter(token => token.trim() !== "")
         const firebasePromises = [] as Promise<BatchResponse>[]
         for (let i = 0; i < filteredTokens.length; i += MAX_FB_PACKET_SIZE) {
+            const tokens = filteredTokens.slice(i, i + MAX_FB_PACKET_SIZE)
             firebasePromises.push(
-                admin.messaging().sendEachForMulticast({
-                    notification: { title, body },
-                    tokens: filteredTokens.slice(i, i + MAX_FB_PACKET_SIZE)
-                }).catch(e => {
+                admin.messaging().sendEachForMulticast(
+                    link ?
+                        {
+                            notification: { title, body },
+                            tokens,
+                            data: {
+                                meta: "root data",
+                                click_action: link
+                            },
+                            android: {
+                                notification: {
+                                    title, body,
+                                    clickAction: link
+                                },
+                                data: {
+                                    meta: "android data",
+                                    click_action: link
+                                }
+                            }
+                        } :
+                        {
+                            notification: { title, body },
+                            tokens
+                        }
+                ).catch(e => {
                     console.error(`Firebase packet for [${tokens}] rejected: ${e?.message}`)
                     return {
                         successCount: 0,
