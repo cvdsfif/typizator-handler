@@ -1,5 +1,6 @@
 import { InferTargetFromSchema, apiS, arrayS, bigintS, objectS, stringS } from "typizator";
-import { HandlerProps, PING, handlerImpl, lambdaConnector } from "../src";
+import { HandlerEvent, HandlerProps, PING, lambdaConnector } from "../src";
+import { SpecialHeders } from "../src/handler-objects";
 
 describe("Testing the type conversion facade for AWS lambdas", () => {
     const simpleRecordS = objectS({
@@ -107,7 +108,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
                 { databaseConnected: false, errorHandler }
             )
         await reportingErrorHandler({ body: `["mandatory","nullable"]` })
-        expect(errorHandler).toHaveBeenCalledWith("Custom error", {}, { name: "errorGenerator", path: "/errorGenerator" })
+        expect(errorHandler).toHaveBeenCalledWith("Custom error", expect.any(Object), { name: "errorGenerator", path: "/errorGenerator" })
     })
 
     test("Should authorize the handler access if the access rights match", async () => {
@@ -132,7 +133,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         const result = await meowHandler({ body: "Any body", headers: { "x-security-token": SECURITY_TOKEN } })
 
         // THEN the authenticator function is called with the right parameters
-        expect(authenticator).toHaveBeenCalledWith({}, SECURITY_TOKEN, { mask: ACCESS_MASK })
+        expect(authenticator).toHaveBeenCalledWith(expect.any(Object), SECURITY_TOKEN, { mask: ACCESS_MASK })
 
         // AND the underlying function is called
         expect(meowFn).toHaveBeenCalled()
@@ -163,7 +164,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         const result = await meowHandler({ body: "Any body", headers: { "x-security-token": SECURITY_TOKEN } })
 
         // THEN the authenticator function is called with the right parameters
-        expect(authenticator).toHaveBeenCalledWith({}, SECURITY_TOKEN, { mask: ACCESS_MASK })
+        expect(authenticator).toHaveBeenCalledWith(expect.any(Object), SECURITY_TOKEN, { mask: ACCESS_MASK })
 
         // AND the underlying function is not called
         expect(meowFn).not.toHaveBeenCalled()
@@ -292,5 +293,24 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
 
         // AND the result of the call reflects the authorization error
         expect(result).toEqual({ "data": "\"Ok\"" })
+    })
+
+    test("Should forward handler to the underlying implementartion", async () => {
+        // GIVEN a handler is set up
+        const headers = {} as SpecialHeders
+        const sourceEvent = { body: "[]", headers } satisfies HandlerEvent
+        let eventReceived: HandlerEvent
+        const handler =
+            lambdaConnector(
+                simpleApiS.metadata.implementation.noMeow,
+                async (props: HandlerProps) => { eventReceived = props.event }
+            )
+
+        // WHEN invoking the handler
+        await handler(sourceEvent)
+
+
+        // THEN the underlying event is forwarede as it is
+        expect(sourceEvent === eventReceived!).toBeTruthy()
     })
 })

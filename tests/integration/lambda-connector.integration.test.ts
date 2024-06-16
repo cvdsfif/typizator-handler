@@ -3,17 +3,30 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { apiS, intS } from "typizator";
 import { HandlerEvent, HandlerResponse } from "../../src/handler-objects";
 import { BatchResponse } from "../../node_modules/firebase-admin/lib/messaging/messaging-api"
+import { GetSecretValueCommandInput } from "@aws-sdk/client-secrets-manager";
 
 describe("Test interfaces behaviour on a real database", () => {
     jest.setTimeout(60000)
     let getDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
-    let fbConnectedHandler: (event: HandlerEvent) => Promise<HandlerResponse>
+    let connectedHandler: (event: HandlerEvent) => Promise<HandlerResponse>
     let testClient: any
+
+    type SecretsDictionary = {
+        [K: string]: string
+    }
 
     const mockValues = {
         actualSecretString: null as any,
         clientPassedArgs: [] as any[],
-        errorOnNextCall: false
+        errorOnNextCall: false,
+        secretsDictionary: {} as SecretsDictionary
+    }
+
+    const resetMockValues = () => {
+        mockValues.actualSecretString = null
+        mockValues.clientPassedArgs = []
+        mockValues.errorOnNextCall = false
+        mockValues.secretsDictionary = {}
     }
 
     const initializeAppMock = jest.fn()
@@ -30,7 +43,8 @@ describe("Test interfaces behaviour on a real database", () => {
     }
     type HandlerProps = {
         db?: DatabaseConnection,
-        firebaseAdmin?: FirebaseAdminConnection
+        firebaseAdmin?: FirebaseAdminConnection,
+        secrets?: SecretsDictionary
     }
     const dataApi = apiS({
         getData: { args: [], retVal: intS }
@@ -43,12 +57,15 @@ describe("Test interfaces behaviour on a real database", () => {
     beforeAll(async () => {
         jest.mock("@aws-sdk/client-secrets-manager", () => ({
             SecretsManager: jest.fn().mockImplementation(() => ({
-                getSecretValue: jest.fn().mockImplementation(() =>
-                    mockValues.errorOnNextCall ?
+                getSecretValue: jest.fn().mockImplementation((args: GetSecretValueCommandInput) => {
+                    const secret = mockValues.secretsDictionary[args.SecretId!]
+                    return mockValues.errorOnNextCall ?
                         Promise.reject("Error") :
-                        Promise.resolve({
-                            SecretString: mockValues.actualSecretString
-                        }))
+                        secret ? Promise.resolve({ SecretString: secret }) :
+                            Promise.resolve({
+                                SecretString: mockValues.actualSecretString
+                            })
+                })
             }))
         }))
 
@@ -87,7 +104,7 @@ describe("Test interfaces behaviour on a real database", () => {
     })
 
     const connectStandardFbHandler = () => {
-        fbConnectedHandler = handlers.lambdaConnector(
+        connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 await props.firebaseAdmin?.sendMulticastNotification?.(messageTitle, messageSent, tokens)
@@ -125,7 +142,7 @@ describe("Test interfaces behaviour on a real database", () => {
         initializeAppMock.mockReset()
         certMock.mockReset()
         sendForMulticastMock.mockReset()
-        mockValues.errorOnNextCall = false
+        resetMockValues()
         process.env = externalEnvironment!
     })
 
@@ -177,7 +194,7 @@ describe("Test interfaces behaviour on a real database", () => {
         connectStandardFbHandler()
 
         // WHEN calling the connected handler
-        const data = await fbConnectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "" })
 
         // THEN it correctly returns
         expect(data).toEqual({ data: "1" })
@@ -196,7 +213,7 @@ describe("Test interfaces behaviour on a real database", () => {
         }))
 
         // AND the handler is marked as having a firebase connection
-        expect((fbConnectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
+        expect((connectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
             "FIREBASE_ADMIN"
         ]))
     })
@@ -221,7 +238,7 @@ describe("Test interfaces behaviour on a real database", () => {
         }))
 
         // WHEN calling the connected handler
-        const data = await fbConnectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "" })
 
         // THEN it correctly returns
         expect(data).toEqual({ data: "1" })
@@ -246,7 +263,7 @@ describe("Test interfaces behaviour on a real database", () => {
         }))
 
         // WHEN calling the connected handler
-        const data = await fbConnectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "" })
 
         // THEN it correctly returns
         expect(data).toEqual({ data: "1" })
@@ -262,7 +279,7 @@ describe("Test interfaces behaviour on a real database", () => {
         certMock.mockReturnValue("cert")
 
         // AND the connected handler returns a list with an empty token
-        fbConnectedHandler = handlers.lambdaConnector(
+        connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 await props.firebaseAdmin?.sendMulticastNotification?.(messageTitle, messageSent, ["t1", "", "t2"])
@@ -274,7 +291,7 @@ describe("Test interfaces behaviour on a real database", () => {
         )
 
         // WHEN calling the connected handler
-        const data = await fbConnectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "" })
 
         // THEN we have a group notification without the empty tokens
         expect(sendForMulticastMock).toHaveBeenCalledWith(expect.objectContaining({
@@ -302,7 +319,7 @@ describe("Test interfaces behaviour on a real database", () => {
         }))
 
         // AND the connected handler returns a list with an empty token
-        fbConnectedHandler = handlers.lambdaConnector(
+        connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 return (
@@ -315,7 +332,7 @@ describe("Test interfaces behaviour on a real database", () => {
         )
 
         // WHEN calling the connected handler
-        const data = await fbConnectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "" })
 
         // THEN it correctly returns
         expect(data).toEqual({ data: "0" })
@@ -337,7 +354,7 @@ describe("Test interfaces behaviour on a real database", () => {
         connectStandardFbHandler()
 
         // WHEN calling the connected handler
-        const data = await fbConnectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "" })
 
         // THEN the call passes without errors
         expect(data).toEqual({ data: "1" })
@@ -359,7 +376,7 @@ describe("Test interfaces behaviour on a real database", () => {
         connectStandardFbHandler()
 
         // WHEN calling the connected handler
-        await fbConnectedHandler({ body: "" })
+        await connectedHandler({ body: "" })
 
         // THEN Firebase initialization is not called
         expect(certMock).not.toHaveBeenCalled()
@@ -388,7 +405,7 @@ describe("Test interfaces behaviour on a real database", () => {
         connectStandardFbHandler()
 
         // WHEN calling the connected handler
-        await fbConnectedHandler({ body: "" })
+        await connectedHandler({ body: "" })
 
         // THEN Firebase initialization is not called
         expect(certMock).not.toHaveBeenCalled()
@@ -411,7 +428,7 @@ describe("Test interfaces behaviour on a real database", () => {
         connectStandardFbHandler()
 
         // WHEN calling the connected handler
-        await fbConnectedHandler({ body: "" })
+        await connectedHandler({ body: "" })
 
         // THEN Firebase initialization is not called
         expect(certMock).not.toHaveBeenCalled()
@@ -433,7 +450,7 @@ describe("Test interfaces behaviour on a real database", () => {
         connectStandardFbHandler()
 
         // WHEN calling the connected handler
-        await fbConnectedHandler({ body: "" })
+        await connectedHandler({ body: "" })
 
         // THEN Firebase initialization is not called
         expect(certMock).not.toHaveBeenCalled()
@@ -455,7 +472,7 @@ describe("Test interfaces behaviour on a real database", () => {
         connectStandardFbHandler()
 
         // WHEN calling the connected handler
-        await fbConnectedHandler({ body: "" })
+        await connectedHandler({ body: "" })
 
         // THEN Firebase initialization is not called
         expect(certMock).not.toHaveBeenCalled()
@@ -475,7 +492,7 @@ describe("Test interfaces behaviour on a real database", () => {
         certMock.mockReturnValue("cert")
 
         // AND a standard handler is connected and configured to send Android links with the package
-        fbConnectedHandler = handlers.lambdaConnector(
+        connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 await props.firebaseAdmin?.sendMulticastNotification?.(messageTitle, messageSent, ["t1", "t2"], "http://link")
@@ -487,7 +504,7 @@ describe("Test interfaces behaviour on a real database", () => {
         )
 
         // WHEN calling the connected handler
-        const data = await fbConnectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "" })
 
         // THEN it correctly returns
         expect(data).toEqual({ data: "1" })
@@ -521,8 +538,62 @@ describe("Test interfaces behaviour on a real database", () => {
         }))
 
         // AND the handler is marked as having a firebase connection
-        expect((fbConnectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
+        expect((connectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
             "FIREBASE_ADMIN"
         ]))
+    })
+
+    test("Should correctly retrieve AWS secrets and transmit them to the handler", async () => {
+        // GIVEN the environment variable containing the list of secrets
+        process.env.SECRETS_LIST = "arn1,arn2"
+        process.env.SECRETS_KEYS = "key1,key2"
+
+        // AND secret values returned depenging on secret ARNs passed
+        mockValues.secretsDictionary = {
+            arn1: "val1",
+            arn2: "val2"
+        }
+
+        // AND a standard handler is connected and configured to use secret values
+        let secretsReceived = {} as SecretsDictionary
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                secretsReceived = props.secrets!
+            },
+            {
+                secretsUsed: true
+            }
+        )
+
+        // WHEN calling the connected handler
+        await connectedHandler({ body: "" })
+
+        // THEN the secrets are correctly received
+        expect(secretsReceived).toEqual({ key1: { SecretString: "val1" }, key2: { SecretString: "val2" } })
+
+        // AND the handler is marked as having secrets
+        expect((connectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
+            "SECRETS"
+        ]))
+    })
+
+    test("Should raise an exception if the secrets connection is required and there is matching environment variables", async () => {
+        // GIVEN there are no environment variables for secrets
+
+        // AND a standard handler is connected and configured to use secret values
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => { },
+            {
+                secretsUsed: true
+            }
+        )
+
+        // WHEN calling the connected handler
+        const data = await connectedHandler({ body: "" })
+
+        // THEN an exception value is returned
+        expect(data).toEqual(expect.stringContaining("Secrets access not configured"))
     })
 })

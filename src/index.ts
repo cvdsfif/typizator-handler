@@ -151,13 +151,21 @@ const createFirebaseAdminConnection = async () => {
  */
 export type HandlerProps = {
     /**
+     * Full event information, as it is received by the lambda handler
+     */
+    event: HandlerEvent
+    /**
      * If the handler is connected to a database, this is the handler facade allowing to execute queries on that database
      */
     db?: DatabaseConnection
     /**
      * If the handler is connected to a Firebase admin channel, this is the object giving access to it
      */
-    firebaseAdmin?: FirebaseAdminConnection
+    firebaseAdmin?: FirebaseAdminConnection,
+    /**
+     * Dictionary of secret values transmitted from AWS to the handler
+     */
+    secrets?: SecretValuesDictionary
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -187,13 +195,13 @@ const callImplementation = async <T extends FunctionCallDefinition>(
 /**
  * Types of connected resources. For now only DATABASE is supported
  */
-export enum ConnectedResources { DATABASE = "DATABASE", FIREBASE_ADMIN = "FIREBASE_ADMIN" }
+export enum ConnectedResources { DATABASE = "DATABASE", FIREBASE_ADMIN = "FIREBASE_ADMIN", SECRETS = "SECRETS" }
 
 const defaultHandler = <T extends FunctionCallDefinition>(
     definition: T & { metadata: FunctionMetadata },
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
     connectedResources: ConnectedResources[],
-    setupProps: () => Promise<HandlerProps>,
+    setupProps: (event: HandlerEvent) => Promise<HandlerProps>,
     teardownProps: (props: HandlerProps) => Promise<void>,
     errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>,
     authenticator?: (props: HandlerProps, securityToken: string, rights: AccessRights) => Promise<boolean>)
@@ -206,7 +214,7 @@ const defaultHandler = <T extends FunctionCallDefinition>(
         if (event.body === PING) return { data: describeJsonFunction(definition) }
         let props = {} as HandlerProps
         try {
-            props = await setupProps()
+            props = await setupProps(event)
             const ipVar = process.env.IP_LIST
             if (ipVar) {
                 const ipList = JSON.parse(ipVar)
@@ -254,31 +262,6 @@ const defaultHandler = <T extends FunctionCallDefinition>(
 }
 
 /**
- * Connects a Lambda handler for an API method, without server resources connected
- * @param definition Method defined in an `apiS` schema
- * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
- * @param errorHandler Optional function that will be called if any error is thrown in the handler's implementation before the normal error treatment
- * @param authenticator Optional function that checks the authentication token sent from the client in the X-Security-Token against the authentication parameters that are passed in the argument and forbids the access to the underlying implementation if the function returns false
- * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
- * @deprecated Replaced by a more flexible `lambdaConnector`
- */
-export const handlerImpl = <T extends FunctionCallDefinition>(
-    definition: T & { metadata: FunctionMetadata },
-    implementation: (...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
-    errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>,
-    authenticator?: (props: HandlerProps, securityToken: string, rights: AccessRights) => Promise<boolean>):
-    ((event: HandlerEvent) => Promise<HandlerResponse>) =>
-    defaultHandler(
-        definition,
-        async (_: HandlerProps, ...args: InferArguments<T["args"]>) => await implementation(...args),
-        [],
-        async () => ({}),
-        async (_: HandlerProps) => { },
-        errorHandler,
-        authenticator
-    )
-
-/**
  * Creates a database connection using the `pg` library from the environment variables.
  * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
  * - DB_NAME is the name of the database to connect to
@@ -310,6 +293,25 @@ export const connectPostgresDb = async () => {
     return client;
 }
 
+const loadSecrets = async () => {
+    const arnList = process.env.SECRETS_LIST
+    const secretKeys = process.env.SECRETS_KEYS
+    console.log(arnList)
+    console.log(secretKeys)
+
+    if (!arnList || !secretKeys)
+        throw new Error("Secrets access not configured, the process environment must contain SECRETS_LIST and SECRETS_KEYS")
+
+    const returnValue = {} as SecretValuesDictionary
+    const arns = arnList.split(",")
+    const keys = secretKeys.split(",")
+    const secretsManager = new SecretsManager()
+    for (let i = 0; i < arns.length; i++) {
+        returnValue[keys[i]] = await secretsManager.getSecretValue({ SecretId: arns[i] })
+    }
+    return returnValue
+}
+
 /**
  * Access rights provided by the external environment
  */
@@ -321,30 +323,36 @@ export type AccessRights = {
 }
 
 /**
- * Connects a Lambda handler for an API method, with server resources connected
- * @param definition Method defined in an `apiS` schema
- * @param implementation Function implementing the API method. Its parameters and return types must be those of the `definition`
- * @param errorHandler Optional function that will be called if any error is thrown in the handler's implementation before the normal error treatment
- * @param authenticator Optional function that checks the authentication token sent from the client in the X-Security-Token against the authentication parameters that are passed in the argument and forbids the access to the underlying implementation if the function returns false
- * @returns Lambda handler checking and converting the JSON parameters passed in a lambda call and calling the implementation function passed as `implementation`
- * @deprecated Replaced by a more flexible `lambdaConnector`
+ * Minimal data representing the value of the secret
  */
-export const connectedHandlerImpl = <T extends FunctionCallDefinition>(
-    definition: T & { metadata: FunctionMetadata },
-    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
-    errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>,
-    authenticator?: (props: HandlerProps, securityToken: string, rights: AccessRights) => Promise<boolean>):
-    (event: HandlerEvent) => Promise<HandlerResponse> =>
-    defaultHandler(
-        definition,
-        implementation,
-        [ConnectedResources.DATABASE],
-        async () => {
-            const client = await connectPostgresDb()
-            return ({ db: connectDatabase(client) })
-        },
-        async (props: HandlerProps) => await props.db?.client.end(),
-        errorHandler, authenticator)
+export type SecretValue = {
+    /**
+     * Human-readable secret name
+     */
+    Name?: string,
+    /**
+     * Secret's binary value
+     */
+    SecretBinary?: Uint8Array,
+    /**
+     * Secret's string value
+     */
+    SecretString?: string,
+    /**
+     * Secret's creation date
+     */
+    CreatedDate?: Date
+}
+
+/**
+ * Dictionary of secret values to be used by a handler
+ */
+export type SecretValuesDictionary = {
+    /**
+     * Key-value pairs of names/secrets
+     */
+    [K: string]: SecretValue
+}
 
 /**
  * Properties defining what and how will be injected into the lambda handler
@@ -379,7 +387,13 @@ export type ConnectorProperties = {
      * - FB_SECRET_ARN is the identifier of the AWS Secret containing the certificates necessary to access Firebase
      * - FB_DATABASE_NAME is the name of the Firebase database that is configured in the Firebase admin panel
      */
-    firebaseAdminConnected?: boolean
+    firebaseAdminConnected?: boolean,
+    /**
+     * If `true`, the `SECRETS_LIST` environment variable contains a comma-separated list of secret arns.
+     * `SECRET_KEYS` contains the list of secrets identifiers to be used as keys for the dictionary passed to the handler
+     * Their values are retrieved and transferred to the handler's properties
+     */
+    secretsUsed?: boolean
 }
 
 export const lambdaConnector = <T extends FunctionCallDefinition>(
@@ -395,15 +409,21 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     if (props.firebaseAdminConnected) {
         connectedResources.push(ConnectedResources.FIREBASE_ADMIN)
     }
+    if (props.secretsUsed) {
+        connectedResources.push(ConnectedResources.SECRETS)
+    }
 
-    const setupProps = async () => {
-        const handlerProps = {} as HandlerProps
+    const setupProps = async (event: HandlerEvent) => {
+        const handlerProps = { event } as HandlerProps
         if (props.databaseConnected) {
             const client = await connectPostgresDb()
             handlerProps.db = connectDatabase(client)
         }
         if (props.firebaseAdminConnected) {
             handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
+        }
+        if (props.secretsUsed) {
+            handlerProps.secrets = await loadSecrets()
         }
         return handlerProps
     }
