@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- Telegraf connector
+
 ## 3.0.0-beta.1 - 2024-06-17
 AWS secrets connector simplified
 

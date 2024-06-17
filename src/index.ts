@@ -6,6 +6,7 @@ import { HandlerEvent, HandlerResponse } from "./handler-objects";
 import { DatabaseConnection, connectDatabase } from "./database-connection";
 import * as admin from 'firebase-admin'
 import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
+import { Telegraf } from "telegraf"
 
 export const PING = "@@ping";
 
@@ -172,7 +173,11 @@ export type HandlerProps = {
     /**
      * Dictionary of secret values transmitted from AWS to the handler
      */
-    secrets?: SecretValue[]
+    secrets?: SecretValue[],
+    /**
+     * If the handler is connected to a Telegraf bot, this is the bot facade allowing to send messages to that bot
+     */
+    telegraf?: Telegraf
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -200,9 +205,14 @@ const callImplementation = async <T extends FunctionCallDefinition>(
 }
 
 /**
- * Types of connected resources. For now only DATABASE is supported
+ * Types of connected resources.
  */
-export enum ConnectedResources { DATABASE = "DATABASE", FIREBASE_ADMIN = "FIREBASE_ADMIN", SECRETS = "SECRETS" }
+export enum ConnectedResources {
+    DATABASE = "DATABASE",
+    FIREBASE_ADMIN = "FIREBASE_ADMIN",
+    SECRETS = "SECRETS",
+    TELEGRAF = "TELEGRAF"
+}
 
 const defaultHandler = <T extends FunctionCallDefinition>(
     definition: T & { metadata: FunctionMetadata },
@@ -281,6 +291,17 @@ const loadSecrets = async () => {
     }
 
     return retval
+}
+
+export const createTelegrafConnection = async () => {
+    const telegrafArn = process.env.TELEGRAF_SECRET_ARN
+    if (!telegrafArn)
+        throw new Error("Telegraf secret ARN not specified in the TELEGRAF_SECRET_ARN environment variable")
+    const secretString =
+        (await new SecretsManager()
+            .getSecretValue({ SecretId: telegrafArn }))
+            .SecretString
+    return new Telegraf(secretString!)
 }
 
 /**
@@ -363,7 +384,12 @@ export type ConnectorProperties = {
      * If `true`, the `SECRETS_LIST` environment variable contains a comma-separated list of secret arns.
      * Their values are retrieved and transferred to the handler's properties
      */
-    secretsUsed?: boolean
+    secretsUsed?: boolean,
+    /**
+     * If `true`, the underlying lambda receives in props parameter an interface allowing to send metrics to a telegraf instance.
+     * The `TELEGRAF_SECRET_ARN` environment variable contains the arn of the AWS Secret containing the telegraf channel token.
+     */
+    telegraf?: boolean
 }
 
 export const lambdaConnector = <T extends FunctionCallDefinition>(
@@ -382,6 +408,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     if (props.secretsUsed) {
         connectedResources.push(ConnectedResources.SECRETS)
     }
+    if (props.telegraf) {
+        connectedResources.push(ConnectedResources.TELEGRAF)
+    }
 
     const setupProps = async (event: HandlerEvent) => {
         const handlerProps = { event } as HandlerProps
@@ -394,6 +423,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         }
         if (props.secretsUsed) {
             handlerProps.secrets = await loadSecrets()
+        }
+        if (props.telegraf) {
+            handlerProps.telegraf = await createTelegrafConnection()
         }
         return handlerProps
     }
