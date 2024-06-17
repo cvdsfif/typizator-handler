@@ -146,6 +146,13 @@ const createFirebaseAdminConnection = async () => {
     }
 }
 
+export type SecretValue = {
+    Name?: string,
+    SecretBinary?: Uint8Array,
+    SecretString?: string,
+    CreatedDate?: Date
+}
+
 /**
  * Properties passed to a connected AWS lambda handler
  */
@@ -165,7 +172,7 @@ export type HandlerProps = {
     /**
      * Dictionary of secret values transmitted from AWS to the handler
      */
-    secrets?: SecretValuesDictionary
+    secrets?: SecretValue[]
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -261,6 +268,21 @@ const defaultHandler = <T extends FunctionCallDefinition>(
     return fn
 }
 
+const loadSecrets = async () => {
+    const listOfSecrets = process.env.SECRETS_LIST
+    if (!listOfSecrets)
+        throw new Error("Secrets list not specified in the SECRETS_LIST environemnt variable")
+    const secrets = listOfSecrets.split(",")
+    const retval = [] as SecretValue[]
+
+    const secretsManager = new SecretsManager()
+    for (const secret of secrets) {
+        retval.push(await secretsManager.getSecretValue({ SecretId: secret }))
+    }
+
+    return retval
+}
+
 /**
  * Creates a database connection using the `pg` library from the environment variables.
  * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
@@ -293,25 +315,6 @@ export const connectPostgresDb = async () => {
     return client;
 }
 
-const loadSecrets = async () => {
-    const arnList = process.env.SECRETS_LIST
-    const secretKeys = process.env.SECRETS_KEYS
-    console.log(arnList)
-    console.log(secretKeys)
-
-    if (!arnList || !secretKeys)
-        throw new Error("Secrets access not configured, the process environment must contain SECRETS_LIST and SECRETS_KEYS")
-
-    const returnValue = {} as SecretValuesDictionary
-    const arns = arnList.split(",")
-    const keys = secretKeys.split(",")
-    const secretsManager = new SecretsManager()
-    for (let i = 0; i < arns.length; i++) {
-        returnValue[keys[i]] = await secretsManager.getSecretValue({ SecretId: arns[i] })
-    }
-    return returnValue
-}
-
 /**
  * Access rights provided by the external environment
  */
@@ -320,38 +323,6 @@ export type AccessRights = {
      * Bitmask defining the access rights to the handler
      */
     mask?: number | null
-}
-
-/**
- * Minimal data representing the value of the secret
- */
-export type SecretValue = {
-    /**
-     * Human-readable secret name
-     */
-    Name?: string,
-    /**
-     * Secret's binary value
-     */
-    SecretBinary?: Uint8Array,
-    /**
-     * Secret's string value
-     */
-    SecretString?: string,
-    /**
-     * Secret's creation date
-     */
-    CreatedDate?: Date
-}
-
-/**
- * Dictionary of secret values to be used by a handler
- */
-export type SecretValuesDictionary = {
-    /**
-     * Key-value pairs of names/secrets
-     */
-    [K: string]: SecretValue
 }
 
 /**
@@ -390,7 +361,6 @@ export type ConnectorProperties = {
     firebaseAdminConnected?: boolean,
     /**
      * If `true`, the `SECRETS_LIST` environment variable contains a comma-separated list of secret arns.
-     * `SECRET_KEYS` contains the list of secrets identifiers to be used as keys for the dictionary passed to the handler
      * Their values are retrieved and transferred to the handler's properties
      */
     secretsUsed?: boolean

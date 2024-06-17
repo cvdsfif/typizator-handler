@@ -546,7 +546,6 @@ describe("Test interfaces behaviour on a real database", () => {
     test("Should correctly retrieve AWS secrets and transmit them to the handler", async () => {
         // GIVEN the environment variable containing the list of secrets
         process.env.SECRETS_LIST = "arn1,arn2"
-        process.env.SECRETS_KEYS = "key1,key2"
 
         // AND secret values returned depenging on secret ARNs passed
         mockValues.secretsDictionary = {
@@ -570,7 +569,7 @@ describe("Test interfaces behaviour on a real database", () => {
         await connectedHandler({ body: "" })
 
         // THEN the secrets are correctly received
-        expect(secretsReceived).toEqual({ key1: { SecretString: "val1" }, key2: { SecretString: "val2" } })
+        expect(secretsReceived).toEqual([{ SecretString: "val1" }, { SecretString: "val2" }])
 
         // AND the handler is marked as having secrets
         expect((connectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
@@ -594,6 +593,6 @@ describe("Test interfaces behaviour on a real database", () => {
         const data = await connectedHandler({ body: "" })
 
         // THEN an exception value is returned
-        expect(data).toEqual(expect.stringContaining("Secrets access not configured"))
+        expect(data).toEqual(expect.stringContaining("Secrets list not specified"))
     })
 })
