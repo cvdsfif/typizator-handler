@@ -161,7 +161,7 @@ export type HandlerProps = {
     /**
      * Full event information, as it is received by the lambda handler
      */
-    event: HandlerEvent
+    event?: HandlerEvent
     /**
      * If the handler is connected to a database, this is the handler facade allowing to execute queries on that database
      */

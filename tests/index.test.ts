@@ -299,7 +299,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // GIVEN a handler is set up
         const headers = {} as SpecialHeders
         const sourceEvent = { body: "[]", headers } satisfies HandlerEvent
-        let eventReceived: HandlerEvent
+        let eventReceived: HandlerEvent | undefined
         const handler =
             lambdaConnector(
                 simpleApiS.metadata.implementation.noMeow,
