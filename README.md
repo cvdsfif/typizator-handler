@@ -96,6 +96,8 @@ But wait a second. Connection to _what_ database? We didn't seem to have configu
 
 All this is configured automatically if you use the `cdk-typescript-lib` library to integrate all this story with the CDK. Why it is separated from this library? Simply because you don't want your lambdas to know anything about the details of their own deployment via CDK, it's not their concern. All they need are the type conversions, the resources connections and the handlers for that. And this is exactly what this library provides.
 
+Note that in your implementations you still have the access to the original event received by the lambda function through the `event` field of `HandlerProps`.
+
 ### Custom error treatment
 
 Note that you can pass as the third parameter of any handler a function that you can use as an error logger. It will be called on every uncaught exception that can occur in your implementation code:
@@ -146,6 +148,68 @@ await props.firebaseAdmin?.sendMulticastNotification?.(
 ```
 
 The function returns a standard `BatchResponse` that you can use as specified in Firebase documentation.
+
+Note that when you use this connector, the Firebase secret key (that you have to obtain from Firebase) has to be in the secret identified by the ARN contained in the FB_SECRET_ARN environment variable. The Firebase database URL (also available from Firebase) has to be in the FB_DATABASE_NAME environment variable.
+
+### Telegram connector
+
+If your application needs a Telegram bot connection via Telegraf, you can inject it into your handler by putting the `telegraf` field in the handler's properties:
+
+```ts
+lambdaConnector(
+    api.metadata.implementation.helloWorld
+    helloWorldImpl,
+    {
+        telegraf: true
+    }
+)
+```
+
+Note that in that case your Telegram bot's ID has to be in the AWS secret identified by the ARN contained in the `TELEGRAF_SECRET_ARN` evironment variable.
+
+In the handler function `HandlerProps` will contain the `telegraf` field pointing to a connected Telegraf object that you can use to communicate with the chosed Telegram bot.
+
+The handler for the Telegram bot must be an API function with no arguments and no return value that will set up a connector similar to this:
+
+```ts
+export const proceedImpl = async (props: HandlerProps): Promise<void> => {
+    props.telegraf?.start(async ctx => {
+        // Response to starting to use the bot
+    })
+
+    props.telegraf?.hears("hi", async ctx => {
+        // Response to "hi" message
+    })
+
+    // We let Telegraf treat the body of the message received by the handler
+    const body = JSON.parse(props.event!.body)
+    await props.telegraf?.handleUpdate(body)
+}
+
+export const proceed = lambdaConnector(
+    api.metadata.implementation.telegraf,
+    telegrafImpl,
+    {
+        telegraf: true
+    }
+)
+```
+
+### AWS secrets injection
+
+If your application needs to use values stored in AWS secrets available for your account, you can specify it in your Lambda connector:
+
+```ts
+lambdaConnector(
+    api.metadata.implementation.helloWorld
+    helloWorldImpl,
+    {
+        secretsUsed: true
+    }
+)
+```
+
+Once it's done, your connector expects to get in the `SECRETS_LIST` environment variable a comma-separated list of ARNs of the AWS secrets you want to use in your handler. Once it's done, the values of the secrets are injected into the `HandlerProps` as an array in the `secrets` field.
 
 ### Database connection helpers
 
