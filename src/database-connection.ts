@@ -1,5 +1,5 @@
 import { Client, QueryResult } from "pg";
-import { BigintS, BoolS, DateS, DefaultBehaviour, ExtendedSchema, ExtractFromFacade, FloatS, IntS, NotNullFacade, ObjectOrFacadeS, Schema, SchemaDefinition, SchemaSource, SchemaTarget, StringS } from "typizator";
+import { BigintS, BoolS, DateS, DefaultBehaviour, ExtendedSchema, ExtractFromFacade, FloatS, InferTargetFromSchema, IntS, NotNullFacade, ObjectOrFacadeS, ObjectS, PrimitiveSchemaTypes, Schema, SchemaDefinition, SchemaSource, SchemaTarget, StringS } from "typizator";
 import JSONBig from "json-bigint";
 
 /**
@@ -109,6 +109,20 @@ export type RecordsWithExclusions<
     }
 
 /**
+ * Schemas for target types for the `typedSchema` call
+ */
+export type QueryTargetSchemas<T extends SchemaDefinition> =
+    ObjectOrFacadeS<T> |
+    BigintS | StringS | DateS | IntS | BoolS | FloatS |
+    NotNullFacade<any, any, any, any>
+
+/**
+ * Extracts the target type from a schema
+ */
+export type InferredQueryTarget<T> =
+    T extends ObjectOrFacadeS<infer S> ? SchemaTarget<S> : InferTargetFromSchema<T>
+
+/**
  * Generic well-typed facade for a database connection
  */
 export interface DatabaseConnection {
@@ -127,15 +141,15 @@ export interface DatabaseConnection {
 
     /**
      * Execute a database request and returns an array of objects matching the given schema
-     * @param schema `typizator` schema defining the data type for each returned row
+     * @param schemaSource `typizator` schema defining the data type for each returned row
      * @param query Full SQL query that should return all the fields returned by `schema`. Note that SQL side, the field names are snake case, they are converted to camel case when extracting to Typescript object.
      * @param parameters Query parameters, indexed on the base 1, refered in the query string as `$1`, `$2`, etc...
      * @returns Array of Typescript objects with the fields value converted following the `schema` definition
      */
-    typedQuery: <T extends SchemaDefinition>(
-        schema: ObjectOrFacadeS<T> | BigintS | StringS | DateS | IntS | BoolS | FloatS,
+    typedQuery: <T extends Schema>(
+        schemaSource: T,
         query: string, parameters?:
-            any[]) => Promise<SchemaTarget<T>[]>,
+            any[]) => Promise<InferredQueryTarget<typeof schemaSource>[]>,
 
     /**
      * Creates a `SELECT` query from the schema's field values
@@ -217,17 +231,17 @@ class DatabaseConnectionImpl implements DatabaseConnection {
             values: parameters
         });
 
-    typedQuery = async <T extends SchemaDefinition>(
-        schemaSource: ObjectOrFacadeS<T> | BigintS | StringS | DateS | IntS | BoolS | FloatS,
+    typedQuery = async <T extends Schema>(
+        schemaSource: T,
         query: string, parameters = [] as any[]
-    ): Promise<SchemaTarget<T>[]> => {
+    ): Promise<InferredQueryTarget<T>[]> => {
         const res = await this.client.query({
             text: query,
             values: parameters,
             rowMode: 'array'
         })
         if (schemaSource.metadata.dataType === "object") {
-            const schema = schemaSource as ObjectOrFacadeS<T>
+            const schema = schemaSource as unknown as ObjectS<any>
             const fields = res.fields.map(field => snakeToCamel(field.name))
             schema.metadata.fields.forEach(
                 (key, value) => {
@@ -236,7 +250,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
                 }
             )
             return res.rows.map(row => {
-                const retval = {} as SchemaTarget<T>
+                const retval = {} as InferredQueryTarget<T>
                 fields.forEach((name, idx) => {
                     try {
                         (retval as any)[name] = schema.metadata.fields.get(name)?.unbox(row[idx])
@@ -247,7 +261,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
                 return retval
             })
         }
-        return res.rows.map(row => schemaSource.unbox(row[0]) as SchemaTarget<T>)
+        return res.rows.map(row => schemaSource.unbox(row[0]) as InferredQueryTarget<T>)
     }
 
     private fieldsList = <T extends SchemaDefinition, D extends FieldsOverride<T>>(schema: ObjectOrFacadeS<T>, overrides: D) =>
@@ -264,8 +278,10 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         tableAndConditions: string,
         parameters = [] as any[],
         overrides = {} as D
-    ): Promise<SchemaTarget<T>[]> =>
-        this.typedQuery(schema, `SELECT ${this.fieldsList(schema, overrides)} FROM ${tableAndConditions}`, parameters);
+    ): Promise<SchemaTarget<T>[]> => {
+        return this
+            .typedQuery(schema, `SELECT ${this.fieldsList(schema, overrides)} FROM ${tableAndConditions}`, parameters) as Promise<SchemaTarget<T>[]>
+    }
 
     private valuesBlock = <T extends SchemaDefinition, D extends FieldsOverride<T>>
         (schema: ObjectOrFacadeS<T>, idx: number, overrides: D) => {

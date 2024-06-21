@@ -42,7 +42,7 @@ describe("Testing the database type handling tools", () => {
         await connection.query("INSERT INTO test_table(id_field) VALUES (1),(2)")
 
         // WHEN querying the table for a primitive-type values
-        const result = await connection.typedQuery(bigintS, "SELECT id_field FROM test_table ORDER BY id_field")
+        const result: bigint[] = await connection.typedQuery(bigintS.notNull, "SELECT id_field FROM test_table ORDER BY id_field")
 
         // THEN an array of primitives is returned
         expect(result).toEqual([1n, 2n])
@@ -56,11 +56,11 @@ describe("Testing the database type handling tools", () => {
             nullString: stringS,
             intField: intS,
             boolField: boolS
-        });
+        })
         const result = await connection.typedQuery(reqS, `
             SELECT 1 AS id,'name' AS first_name, CAST ('2024-01-31 00:00Z' AS TIMESTAMPTZ) AS one_example_date,
             NULL as null_string,2 AS int_field,CAST (1 as BOOL) AS bool_field
-        `);
+        `)
         expect(result[0]).toEqual({
             id: 1n, firstName: "name", oneExampleDate: new Date("2024-01-31 00:00Z"),
             nullString: null, intField: 2, boolField: true

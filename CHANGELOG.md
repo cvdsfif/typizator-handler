@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+Better types compatibility for primitive types in `typedQuery`
 
 ## 3.0.0-beta.3 - 2024-06-18
 Handler prop event exceptionally accepts undefined value
