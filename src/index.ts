@@ -432,6 +432,10 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
 
     const teardownProps = async (handlerProps: HandlerProps) => {
         if (props.databaseConnected) await handlerProps.db?.client.end()
+        if (props.telegraf && handlerProps.telegraf) {
+            const body = JSON.parse(handlerProps.event!.body)
+            await handlerProps.telegraf.handleUpdate(body)
+        }
     }
 
     return defaultHandler(

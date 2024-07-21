@@ -4,7 +4,7 @@ import { apiS, intS } from "typizator";
 import { HandlerEvent, HandlerResponse } from "../../src/handler-objects";
 import { BatchResponse } from "../../node_modules/firebase-admin/lib/messaging/messaging-api"
 import { GetSecretValueCommandInput } from "@aws-sdk/client-secrets-manager";
-import { Telegraf, Telegram } from "telegraf";
+import { Telegraf } from "telegraf";
 
 describe("Test interfaces behaviour on a real database", () => {
     jest.setTimeout(60000)
@@ -56,7 +56,11 @@ describe("Test interfaces behaviour on a real database", () => {
     const messageSent = "msg"
     const tokens = ["t1", "t2"]
 
-    const telegrafStub = {} as Telegraf
+    const telegrafHandlerMock = jest.fn()
+
+    const telegrafStub = {
+        handleUpdate: telegrafHandlerMock as any
+    } as Telegraf
     const telegrafMock = jest.fn().mockImplementation((_: string) => telegrafStub)
 
     beforeAll(async () => {
@@ -152,6 +156,7 @@ describe("Test interfaces behaviour on a real database", () => {
         certMock.mockReset()
         sendForMulticastMock.mockReset()
         telegrafMock.mockReset().mockImplementation((_: string) => telegrafStub)
+        telegrafHandlerMock.mockReset()
         resetMockValues()
         process.env = externalEnvironment!
     })
@@ -620,7 +625,6 @@ describe("Test interfaces behaviour on a real database", () => {
         connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
-                console.log("Telegraf", props.telegraf)
                 telegrafGot = props.telegraf
             },
             {
@@ -629,10 +633,9 @@ describe("Test interfaces behaviour on a real database", () => {
         )
 
         // WHEN calling the connected handler
-        await connectedHandler({ body: "" })
+        await connectedHandler({ body: "{}" })
 
         // THEN the connected handler correctly receives an instance of Telegraf
-        console.log(telegrafGot)
         expect(telegrafGot === telegrafStub).toBeTruthy()
 
         // AND Telegraf is created with the right secret value
@@ -647,6 +650,9 @@ describe("Test interfaces behaviour on a real database", () => {
         expect((connectedHandler as any).connectedResources).toEqual(expect.arrayContaining([
             "TELEGRAF"
         ]))
+
+        // AND the Telegram handler is invoked
+        expect(telegrafHandlerMock).toHaveBeenCalled()
     })
 
     test("Should raise an exception if the secrets connection is required and there is no matching environment variables", async () => {
@@ -655,16 +661,19 @@ describe("Test interfaces behaviour on a real database", () => {
         // AND a standard handler is connected and configured to inject Telegraf
         connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
-            async (props: HandlerProps) => { },
+            async () => { },
             {
                 telegraf: true
             }
         )
 
         // WHEN calling the connected handler
-        const data = await connectedHandler({ body: "" })
+        const data = await connectedHandler({ body: "{}" })
 
         // THEN an exception value is returned
         expect(data).toEqual(expect.stringContaining("Telegraf secret ARN not specified"))
+
+        // AND the Telegram handler is not invoked
+        expect(telegrafHandlerMock).not.toHaveBeenCalled()
     })
 })
