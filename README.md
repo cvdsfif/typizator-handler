@@ -180,10 +180,6 @@ export const proceedImpl = async (props: HandlerProps): Promise<void> => {
     props.telegraf?.hears("hi", async ctx => {
         // Response to "hi" message
     })
-
-    // We let Telegraf treat the body of the message received by the handler
-    const body = JSON.parse(props.event!.body)
-    await props.telegraf?.handleUpdate(body)
 }
 
 export const proceed = lambdaConnector(
@@ -194,6 +190,8 @@ export const proceed = lambdaConnector(
     }
 )
 ```
+
+Note that you don't have to call the `handleUpdate` function at the end of your handler, it's done automatically by the framework.
 
 ### AWS secrets injection
 
