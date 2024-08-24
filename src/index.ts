@@ -310,6 +310,16 @@ export const createTelegrafConnection = async () => {
 export const DB_APP_NAME = "typizator_sl_client"
 
 /**
+ * Minimum time for the connection to be idle before recovered by the system
+ */
+export const MIN_CONNECTION_IDLE_TIME_SEC = 3
+
+/**
+ * Allowed number of parallel connections to the database
+ */
+export const MAX_CONNECTIONS = 32
+
+/**
  * Creates a database connection using the `serverless-postgres` library from the environment variables.
  * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
  * - DB_NAME is the name of the database to connect to
@@ -337,7 +347,10 @@ export const connectPostgresDb = async () => {
         ssl: {
             rejectUnauthorized: false
         },
-        application_name: DB_APP_NAME
+        application_name: DB_APP_NAME,
+        minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
+        manualMaxConnections: true,
+        maxConnections: MAX_CONNECTIONS
     })
     await client.connect()
     return client

@@ -23,6 +23,8 @@ describe("Test the lambda connector against a mock environment", () => {
 
     let getDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
     let DB_APP_NAME: string
+    let MIN_CONNECTION_IDLE_TIME_SEC: number
+    let MAX_CONNECTIONS: number
     let handlers: any
 
     type DatabaseConnection = {
@@ -76,6 +78,8 @@ describe("Test the lambda connector against a mock environment", () => {
             }
         )
         DB_APP_NAME = handlers.DB_APP_NAME
+        MIN_CONNECTION_IDLE_TIME_SEC = handlers.MIN_CONNECTION_IDLE_TIME_SEC
+        MAX_CONNECTIONS = handlers.MAX_CONNECTIONS
     })
 
     test("Should correctly configure the database", async () => {
@@ -95,7 +99,10 @@ describe("Test the lambda connector against a mock environment", () => {
                     rejectUnauthorized: false
                 },
                 delayMs: 3000,
-                application_name: DB_APP_NAME
+                application_name: DB_APP_NAME,
+                minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
+                maxConnections: MAX_CONNECTIONS,
+                manualMaxConnections: true
             }])
     })
 })
