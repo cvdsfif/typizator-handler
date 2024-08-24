@@ -305,35 +305,42 @@ export const createTelegrafConnection = async () => {
 }
 
 /**
- * Creates a database connection using the `pg` library from the environment variables.
+ * Internal name making the difference between the database clients created by this connector and the others
+ */
+export const DB_APP_NAME = "typizator_sl_client"
+
+/**
+ * Creates a database connection using the `serverless-postgres` library from the environment variables.
  * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
  * - DB_NAME is the name of the database to connect to
  * - DB_SECRET_ARN is the identifier of the AWS Secret containing the password needed to access the database
- * @returns Database connection, as defined in the `pg` library
+ * @returns Database connection, as defined in the `serverless-postgres` library
  */
 export const connectPostgresDb = async () => {
-    const host = process.env.DB_ENDPOINT_ADDRESS;
-    const database = process.env.DB_NAME;
-    const dbSecretArn = process.env.DB_SECRET_ARN;
+    const host = process.env.DB_ENDPOINT_ADDRESS
+    const database = process.env.DB_NAME
+    const dbSecretArn = process.env.DB_SECRET_ARN
     if (!host || !database || !dbSecretArn)
         throw new Error("Database access not configured, the process environment must contain DB_ENDPOINT_ADDRESS,DB_NAME and DB_SECRET_ARN")
     const secretString =
         (await new SecretsManager()
             .getSecretValue({ SecretId: dbSecretArn }))
-            .SecretString;
+            .SecretString
     if (!secretString)
-        throw new Error("Database password not available on AWS secrets");
-    const { password } = JSON.parse(secretString);
+        throw new Error("Database password not available on AWS secrets")
+    const { password } = JSON.parse(secretString)
     const client = new ServerlessClient({
         user: "postgres",
         host, database, password,
         port: 5432,
+        delayMs: 3000,
         ssl: {
             rejectUnauthorized: false
-        }
-    });
-    await client.connect();
-    return client;
+        },
+        application_name: DB_APP_NAME
+    })
+    await client.connect()
+    return client
 }
 
 /**
@@ -352,7 +359,7 @@ export type AccessRights = {
 export type ConnectorProperties = {
     /**
      * If `true`, the underlying lambda receives in props prarmeter a connection to a database.
-     * The database connection is created based on the `pg` library and configured with the following environment variables:
+     * The database connection is created based on the `serverless-postgres` library and configured with the following environment variables:
      * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
      * - DB_NAME is the name of the database to connect to
      * - DB_SECRET_ARN is the identifier of the AWS Secret containing the password needed to access the database

@@ -128,7 +128,7 @@ export type InferredQueryTarget<T> =
  */
 export interface DatabaseConnection {
     /**
-     * Client interface. Actually the only possibility is the client interface from the `pg`library
+     * Client interface. Actually the only possibility is the client interface from the `serverless-postgres` library
      */
     client: ServerlessClient,
 
@@ -450,7 +450,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
 
 /**
  * Creates a database connection facade
- * @param client `serverless-pg` client connected to a PostgreSQL database
+ * @param client `serverless-postgres` client connected to a PostgreSQL database
  * @returns facade defined by the `DatabaseConnection` interface
  */
 export const connectDatabase = (client: ServerlessClient) => new DatabaseConnectionImpl(client) as DatabaseConnection

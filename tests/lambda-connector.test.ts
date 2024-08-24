@@ -22,6 +22,7 @@ describe("Test the lambda connector against a mock environment", () => {
     }
 
     let getDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
+    let DB_APP_NAME: string
     let handlers: any
 
     type DatabaseConnection = {
@@ -74,6 +75,7 @@ describe("Test the lambda connector against a mock environment", () => {
                 databaseConnected: true
             }
         )
+        DB_APP_NAME = handlers.DB_APP_NAME
     })
 
     test("Should correctly configure the database", async () => {
@@ -91,7 +93,9 @@ describe("Test the lambda connector against a mock environment", () => {
                 port: 5432,
                 ssl: {
                     rejectUnauthorized: false
-                }
+                },
+                delayMs: 3000,
+                application_name: DB_APP_NAME
             }])
     })
 })
