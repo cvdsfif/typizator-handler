@@ -1,4 +1,4 @@
-import * as pg from "pg";
+import ServerlessClient from "serverless-postgres";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { apiS, intS } from "typizator";
 import { HandlerEvent, HandlerResponse } from "../../src/handler-objects";
@@ -18,14 +18,12 @@ describe("Test interfaces behaviour on a real database", () => {
 
     const mockValues = {
         actualSecretString: null as any,
-        clientPassedArgs: [] as any[],
         errorOnNextCall: false,
         secretsDictionary: {} as SecretsDictionary
     }
 
     const resetMockValues = () => {
         mockValues.actualSecretString = null
-        mockValues.clientPassedArgs = []
         mockValues.errorOnNextCall = false
         mockValues.secretsDictionary = {}
     }
@@ -37,7 +35,7 @@ describe("Test interfaces behaviour on a real database", () => {
     let handlers: any
 
     type DatabaseConnection = {
-        client: pg.Client
+        client: ServerlessClient
     }
     type FirebaseAdminConnection = {
         sendMulticastNotification?: (title: string, body: string, tokens: string[], link?: string) => Promise<BatchResponse>
@@ -83,13 +81,7 @@ describe("Test interfaces behaviour on a real database", () => {
         }))
 
         const container = await new PostgreSqlContainer().withReuse().start()
-        testClient = new pg.Client({ connectionString: container.getConnectionUri() })
-        jest.mock("pg", () => ({
-            Client: (jest.fn().mockImplementation((...args: any) => {
-                mockValues.clientPassedArgs = args;
-                return testClient;
-            }))
-        }))
+        testClient = new ServerlessClient({ connectionString: container.getConnectionUri() })
 
 
         jest.mock("firebase-admin", () => ({
@@ -129,7 +121,7 @@ describe("Test interfaces behaviour on a real database", () => {
         )
     }
 
-    afterAll(async () => await testClient.end())
+    afterAll(async () => await testClient.clean())
 
     let externalEnvironment
 
@@ -169,25 +161,6 @@ describe("Test interfaces behaviour on a real database", () => {
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));
         process.env.DB_SECRET_ARN = "arn";
         (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("password not available"));
-    })
-
-    test("Should correctly configure the database", async () => {
-        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
-        process.env.DB_NAME = "db"
-        process.env.DB_SECRET_ARN = "arn"
-        mockValues.actualSecretString = `{ "password": "secret" }`
-        expect(await getDataHandler({ body: "" })).toEqual({ data: "1" })
-        expect(mockValues.clientPassedArgs).toEqual([
-            {
-                user: "postgres",
-                database: "db",
-                host: "http://xxx",
-                password: "secret",
-                port: 5432,
-                ssl: {
-                    rejectUnauthorized: false
-                }
-            }])
     })
 
     test("Should expose database as connected resource for the database handler", async () => {

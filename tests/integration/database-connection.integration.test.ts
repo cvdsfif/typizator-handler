@@ -1,7 +1,7 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
-import { Client } from "pg";
 import { ActionOnConflict, DatabaseConnection, connectDatabase } from "../../src/database-connection";
 import { bigintS, boolS, dateS, intS, objectS, stringS } from "typizator";
+import ServerlessClient from "serverless-postgres";
 
 describe("Testing the database type handling tools", () => {
     jest.setTimeout(60000);
@@ -9,7 +9,7 @@ describe("Testing the database type handling tools", () => {
 
     beforeAll(async () => {
         const container = await new PostgreSqlContainer().withReuse().start();
-        const client = new Client({ connectionString: container.getConnectionUri() });
+        const client = new ServerlessClient({ connectionString: container.getConnectionUri() });
         await client.connect();
         connection = connectDatabase(client);
     });

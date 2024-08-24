@@ -1,12 +1,12 @@
 import { ArrayMetadata, FunctionCallDefinition, FunctionMetadata, InferArguments, InferTargetFromSchema, NamedMetadata, ObjectMetadata, Schema, intS } from "typizator";
 import JSONBig from "json-bigint";
 import { SecretsManager } from "@aws-sdk/client-secrets-manager";
-import { Client } from "pg";
 import { HandlerEvent, HandlerResponse } from "./handler-objects";
 import { DatabaseConnection, connectDatabase } from "./database-connection";
 import * as admin from 'firebase-admin'
 import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
 import { Telegraf } from "telegraf"
+import ServerlessClient from "serverless-postgres";
 
 export const PING = "@@ping";
 
@@ -186,7 +186,7 @@ const callImplementation = async <T extends FunctionCallDefinition>(
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
     props: HandlerProps):
     Promise<string> => {
-    let args = [];
+    let args = [] as any[]
     if (definition.args.length > 0) {
         const jsonArgs = JSONBig.parse(eventBody);
         if (!Array.isArray(jsonArgs))
@@ -324,7 +324,7 @@ export const connectPostgresDb = async () => {
     if (!secretString)
         throw new Error("Database password not available on AWS secrets");
     const { password } = JSON.parse(secretString);
-    const client = new Client({
+    const client = new ServerlessClient({
         user: "postgres",
         host, database, password,
         port: 5432,
@@ -435,7 +435,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
             const body = JSON.parse(handlerProps.event!.body)
             await handlerProps.telegraf.handleUpdate(body)
         }
-        if (props.databaseConnected) await handlerProps.db?.client.end()
+        if (props.databaseConnected) {
+            await handlerProps.db?.client.clean()
+        }
     }
 
     return defaultHandler(

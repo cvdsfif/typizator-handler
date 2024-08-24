@@ -213,9 +213,9 @@ Once it's done, your connector expects to get in the `SECRETS_LIST` environment 
 
 As we allow our lambdas to connect to databases (Postgres only for now, but nobody prevents us from adding support to other ones in the near future), it would be good to communicate to that database without the headache given by the fact that SQL and Typescript don't share the same types system and sometimes getting an objects list from an SQL query can be... how to say... unpredictable...
 
-The database client connection is exposed through the `DatabaseConnection` interface that is passed to your lambda through the connected handler described above. Or otherwise you can directly create if from the `pg` connected client by calling the `connectDatabase` factory function from this library. 
+The database client connection is exposed through the `DatabaseConnection` interface that is passed to your lambda through the connected handler described above. Or otherwise you can directly create if from the `serverless-postgres` (that is a wrapper around `pg` optimising connections from lambdas) connected client by calling the `connectDatabase` factory function from this library. 
 
-You can still access the original `pg` client through the interface's `client` property. There is also the `query` shortcut that executes a simple query on the database, returning the data in row mode. Refer to the `pg` library if you forgot what it is.
+You can still access the original `serverless-postgres` client through the interface's `client` property. There is also the `query` shortcut that executes a simple query on the database, returning the data in row mode. Refer to the `serverless-postgres` library if you forgot what it is.
 
 Now, let's look at interesting things. Imagine you have in the database a table named `test_table` containing two fields, `test_id` that is a BIGINT and `test_name` that is a `VARCHAR(255)`. This structure can be defined using `typizator` as
 

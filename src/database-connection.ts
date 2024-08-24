@@ -1,6 +1,7 @@
-import { Client, QueryResult } from "pg";
-import { BigintS, BoolS, DateS, DefaultBehaviour, ExtendedSchema, ExtractFromFacade, FloatS, InferTargetFromSchema, IntS, NotNullFacade, ObjectOrFacadeS, ObjectS, PrimitiveSchemaTypes, Schema, SchemaDefinition, SchemaSource, SchemaTarget, StringS } from "typizator";
+import { FieldDef, QueryResult } from "pg";
+import { BigintS, BoolS, DateS, ExtractFromFacade, FloatS, InferTargetFromSchema, IntS, NotNullFacade, ObjectOrFacadeS, ObjectS, Schema, SchemaDefinition, SchemaTarget, StringS } from "typizator";
 import JSONBig from "json-bigint";
+import ServerlessClient from "serverless-postgres";
 
 /**
  * What to do if an INSERT encounters a conflict on one of the unique keys
@@ -129,7 +130,7 @@ export interface DatabaseConnection {
     /**
      * Client interface. Actually the only possibility is the client interface from the `pg`library
      */
-    client: Client,
+    client: ServerlessClient,
 
     /**
      * Simply forwards the query to the connected client
@@ -223,7 +224,7 @@ export const snakeToCamel = (src: string | String) => src.replace(/([-_][a-z])/i
 export const camelToSnake = (src: string | String) => src.replace(/[A-Z]/g, match => `_${match.toLowerCase()}`);
 
 class DatabaseConnectionImpl implements DatabaseConnection {
-    constructor(public client: Client) { }
+    constructor(public client: ServerlessClient) { }
 
     query = async (request: string, parameters = [] as any[]) =>
         await this.client.query({
@@ -242,16 +243,16 @@ class DatabaseConnectionImpl implements DatabaseConnection {
         })
         if (schemaSource.metadata.dataType === "object") {
             const schema = schemaSource as unknown as ObjectS<any>
-            const fields = res.fields.map(field => snakeToCamel(field.name))
+            const fields = res.fields.map((field: FieldDef) => snakeToCamel(field.name))
             schema.metadata.fields.forEach(
                 (key, value) => {
-                    if (!value.metadata.optional && !fields.find(fieldKey => fieldKey === key))
+                    if (!value.metadata.optional && !fields.find((fieldKey: string) => fieldKey === key))
                         throw new Error(`Mandatory ${key} field missing from the request data`)
                 }
             )
-            return res.rows.map(row => {
+            return res.rows.map((row: any[]) => {
                 const retval = {} as InferredQueryTarget<T>
-                fields.forEach((name, idx) => {
+                fields.forEach((name: string, idx: number) => {
                     try {
                         (retval as any)[name] = schema.metadata.fields.get(name)?.unbox(row[idx])
                     } catch (e: any) {
@@ -261,7 +262,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
                 return retval
             })
         }
-        return res.rows.map(row => schemaSource.unbox(row[0]) as InferredQueryTarget<T>)
+        return res.rows.map((row: any[]) => schemaSource.unbox(row[0]) as InferredQueryTarget<T>)
     }
 
     private fieldsList = <T extends SchemaDefinition, D extends FieldsOverride<T>>(schema: ObjectOrFacadeS<T>, overrides: D) =>
@@ -449,7 +450,7 @@ class DatabaseConnectionImpl implements DatabaseConnection {
 
 /**
  * Creates a database connection facade
- * @param client `pg` client connected to a PostgreSQL database
+ * @param client `serverless-pg` client connected to a PostgreSQL database
  * @returns facade defined by the `DatabaseConnection` interface
  */
-export const connectDatabase = (client: Client) => new DatabaseConnectionImpl(client) as DatabaseConnection
+export const connectDatabase = (client: ServerlessClient) => new DatabaseConnectionImpl(client) as DatabaseConnection
