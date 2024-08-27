@@ -94,6 +94,13 @@ But wait a second. Connection to _what_ database? We didn't seem to have configu
 - `DB_NAME` is the database's name available at the endpoint defined by the previous variable
 - `DB_SECRET_ARN` is the AWS secret's ARN where the database password is stored. We don't store our passwords in clear anywhere
 
+You can optionally change the database connection's serverless parameters by giving values to the following environment variables:
+
+- `DB_APP_NAME` is the string that lets the connector make the difference between the processes it controls and the other ones. Default is `typizator_sl_client`
+- `MIN_CONNECTION_IDLE_TIME_SEC` is the minimum time for the connection to be idle before recovered by the system. Default is `3`
+- `MAX_CONNECTIONS` is the maximum number of parallel connection in the pool to maintain. Default is `24`
+
+
 All this is configured automatically if you use the `cdk-typescript-lib` library to integrate all this story with the CDK. Why it is separated from this library? Simply because you don't want your lambdas to know anything about the details of their own deployment via CDK, it's not their concern. All they need are the type conversions, the resources connections and the handlers for that. And this is exactly what this library provides.
 
 Note that in your implementations you still have the access to the original event received by the lambda function through the `event` field of `HandlerProps`.

@@ -82,6 +82,17 @@ describe("Test the lambda connector against a mock environment", () => {
         MAX_CONNECTIONS = handlers.MAX_CONNECTIONS
     })
 
+    let externalEnvironment
+
+    beforeEach(async () => {
+        externalEnvironment = {} as any
+        for (const key in process.env) externalEnvironment[key] = process.env[key]
+    })
+
+    afterEach(async () => {
+        process.env = externalEnvironment!
+    })
+
     test("Should correctly configure the database", async () => {
         process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
         process.env.DB_NAME = "db"
@@ -102,6 +113,33 @@ describe("Test the lambda connector against a mock environment", () => {
                 application_name: DB_APP_NAME,
                 minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
                 maxConnections: MAX_CONNECTIONS,
+                manualMaxConnections: true
+            }])
+    })
+
+    test("Should correctly configure the database with non-default parameters", async () => {
+        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
+        process.env.DB_NAME = "db"
+        process.env.DB_SECRET_ARN = "arn"
+        process.env.DB_APP_NAME = "differentName"
+        process.env.MIN_CONNECTION_IDLE_TIME_SEC = "7"
+        process.env.MAX_CONNECTIONS = "42"
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        expect(await getDataHandler({ body: "" })).toEqual({ data: "1" })
+        expect(mockValues.clientPassedArgs).toEqual([
+            {
+                user: "postgres",
+                database: "db",
+                host: "http://xxx",
+                password: "secret",
+                port: 5432,
+                ssl: {
+                    rejectUnauthorized: false
+                },
+                delayMs: 3000,
+                application_name: "differentName",
+                minConnectionIdleTimeSec: 7,
+                maxConnections: 42,
                 manualMaxConnections: true
             }])
     })

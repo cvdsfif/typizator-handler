@@ -317,7 +317,7 @@ export const MIN_CONNECTION_IDLE_TIME_SEC = 3
 /**
  * Allowed number of parallel connections to the database
  */
-export const MAX_CONNECTIONS = 32
+export const MAX_CONNECTIONS = 24
 
 /**
  * Creates a database connection using the `serverless-postgres` library from the environment variables.
@@ -347,10 +347,10 @@ export const connectPostgresDb = async () => {
         ssl: {
             rejectUnauthorized: false
         },
-        application_name: DB_APP_NAME,
-        minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
+        application_name: process.env.DB_APP_NAME ?? DB_APP_NAME,
+        minConnectionIdleTimeSec: Number(process.env.MIN_CONNECTION_IDLE_TIME_SEC ?? MIN_CONNECTION_IDLE_TIME_SEC),
         manualMaxConnections: true,
-        maxConnections: MAX_CONNECTIONS
+        maxConnections: Number(process.env.MAX_CONNECTIONS ?? MAX_CONNECTIONS)
     })
     await client.connect()
     return client
