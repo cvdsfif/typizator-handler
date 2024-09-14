@@ -7,7 +7,8 @@ const commonConfig = {
     bundle: true,
     minify: true,
     treeShaking: true,
-    external: Object.keys(dependencies)
+    platform: "node",
+    external: [...Object.keys(dependencies), "aws-cdk-lib", "constructs"]
 }
 
 esbuild.buildSync({
