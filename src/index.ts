@@ -161,11 +161,15 @@ export type HandlerProps = {
     /**
      * Full event information, as it is received by the lambda handler
      */
-    event?: HandlerEvent
+    event?: HandlerEvent,
     /**
      * If the handler is connected to a database, this is the handler facade allowing to execute queries on that database
      */
-    db?: DatabaseConnection
+    db?: DatabaseConnection,
+    /**
+     * If there is a connected replica database, this is the handler facade allowing to execute queties on that database
+     */
+    replicaDb?: DatabaseConnection,
     /**
      * If the handler is connected to a Firebase admin channel, this is the object giving access to it
      */
@@ -328,7 +332,9 @@ export const MAX_CONNECTIONS = 24
  * @returns Database connection, as defined in the `serverless-postgres` library
  */
 export const connectPostgresDb = async (props: ConnectorProperties) => {
-    const host = props.useDatabaseReplica ? process.env.DB_REPLICA_ENDPOINT_ADDRESS : process.env.DB_ENDPOINT_ADDRESS
+    const host = props.replicaInjection === "inject_as_main" ?
+        process.env.DB_REPLICA_ENDPOINT_ADDRESS :
+        process.env.DB_ENDPOINT_ADDRESS
     const database = process.env.DB_NAME
     const dbSecretArn = process.env.DB_SECRET_ARN
     if (!host || !database || !dbSecretArn)
@@ -350,11 +356,31 @@ export const connectPostgresDb = async (props: ConnectorProperties) => {
         },
         application_name: process.env.DB_APP_NAME ?? DB_APP_NAME,
         minConnectionIdleTimeSec: Number(process.env.MIN_CONNECTION_IDLE_TIME_SEC ?? MIN_CONNECTION_IDLE_TIME_SEC),
-        manualMaxConnections: true,
-        maxConnections: Number(process.env.MAX_CONNECTIONS ?? MAX_CONNECTIONS)
+        maxConnections: Number(process.env.MAX_CONNECTIONS ?? MAX_CONNECTIONS),
+        connUtilization: 0.6,
+        maxRetries: 5,
+        capMs: 2000
     })
     await client.connect()
-    return client
+    if (props.replicaInjection !== "inject_separately")
+        return { client }
+    if (!(process.env.DB_REPLICA_ENDPOINT_ADDRESS)) throw new Error("Replica database not connected")
+    const replicaClient = new ServerlessClient({
+        user: "postgres",
+        host: process.env.DB_REPLICA_ENDPOINT_ADDRESS, database, password,
+        port: 5432,
+        delayMs: 3000,
+        ssl: {
+            rejectUnauthorized: false
+        },
+        application_name: process.env.DB_APP_NAME ?? DB_APP_NAME,
+        minConnectionIdleTimeSec: Number(process.env.MIN_CONNECTION_IDLE_TIME_SEC ?? MIN_CONNECTION_IDLE_TIME_SEC),
+        maxConnections: Number(process.env.MAX_CONNECTIONS ?? MAX_CONNECTIONS),
+        connUtilization: 0.6,
+        maxRetries: 5,
+        capMs: 2000
+    })
+    return { client, replicaClient }
 }
 
 /**
@@ -366,6 +392,11 @@ export type AccessRights = {
      */
     mask?: number | null
 }
+
+/**
+ * Type of database connections injections defined in {@link ConnectorProperties}
+ */
+export type DatabaseInjectionType = "no_injection" | "inject_as_main" | "inject_separately"
 
 /**
  * Properties defining what and how will be injected into the lambda handler
@@ -380,9 +411,11 @@ export type ConnectorProperties = {
      */
     databaseConnected?: boolean,
     /**
-     * If `true` uses `DB_REPLICA_ENDPOINT_ADDRESS` instead of `DB_ENDPOINT_ADDRESS` to connect to the read-only replica of the main database instead of the main read-write instance
+     * If the value is `inject_as_main` uses `DB_REPLICA_ENDPOINT_ADDRESS` instead of `DB_ENDPOINT_ADDRESS` to connect to the read-only replica of the main database 
+     * instead of the main read-write instance, if if is `inject_separately`, the main database connection is injected as usual and a connection
+     * to the replica is injected separately
      */
-    useDatabaseReplica?: boolean,
+    replicaInjection?: DatabaseInjectionType,
     /**
      * Optional asynchronous function that will be called if any error is thrown in the handler's implementation before the normal error treatment
      * @param error Error object sent by the function context
@@ -440,8 +473,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     const setupProps = async (event: HandlerEvent) => {
         const handlerProps = { event } as HandlerProps
         if (props.databaseConnected) {
-            const client = await connectPostgresDb(props)
+            const { client, replicaClient } = await connectPostgresDb(props)
             handlerProps.db = connectDatabase(client)
+            if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
         }
         if (props.firebaseAdminConnected) {
             handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
