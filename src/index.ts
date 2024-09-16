@@ -321,13 +321,14 @@ export const MAX_CONNECTIONS = 24
 
 /**
  * Creates a database connection using the `serverless-postgres` library from the environment variables.
- * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
+ * - DB_ENDPOINT_ADDRESS (or DB_REPLICA_ENDPOINT_ADDRESS for the replica database) is the URI pointing to the database that we have to connect
  * - DB_NAME is the name of the database to connect to
  * - DB_SECRET_ARN is the identifier of the AWS Secret containing the password needed to access the database
+ * @param props Connection's properties. Actually one `useDatabaseReplica` is used
  * @returns Database connection, as defined in the `serverless-postgres` library
  */
-export const connectPostgresDb = async () => {
-    const host = process.env.DB_ENDPOINT_ADDRESS
+export const connectPostgresDb = async (props: ConnectorProperties) => {
+    const host = props.useDatabaseReplica ? process.env.DB_REPLICA_ENDPOINT_ADDRESS : process.env.DB_ENDPOINT_ADDRESS
     const database = process.env.DB_NAME
     const dbSecretArn = process.env.DB_SECRET_ARN
     if (!host || !database || !dbSecretArn)
@@ -373,11 +374,15 @@ export type ConnectorProperties = {
     /**
      * If `true`, the underlying lambda receives in props prarmeter a connection to a database.
      * The database connection is created based on the `serverless-postgres` library and configured with the following environment variables:
-     * - ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
+     * - DB_ENDPOINT_ADDRESS is the URI pointing to the database that we have to connect
      * - DB_NAME is the name of the database to connect to
      * - DB_SECRET_ARN is the identifier of the AWS Secret containing the password needed to access the database
      */
     databaseConnected?: boolean,
+    /**
+     * If `true` uses `DB_REPLICA_ENDPOINT_ADDRESS` instead of `DB_ENDPOINT_ADDRESS` to connect to the read-only replica of the main database instead of the main read-write instance
+     */
+    useDatabaseReplica?: boolean,
     /**
      * Optional asynchronous function that will be called if any error is thrown in the handler's implementation before the normal error treatment
      * @param error Error object sent by the function context
@@ -435,7 +440,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     const setupProps = async (event: HandlerEvent) => {
         const handlerProps = { event } as HandlerProps
         if (props.databaseConnected) {
-            const client = await connectPostgresDb()
+            const client = await connectPostgresDb(props)
             handlerProps.db = connectDatabase(client)
         }
         if (props.firebaseAdminConnected) {

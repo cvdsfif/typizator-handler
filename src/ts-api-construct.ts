@@ -5,7 +5,7 @@ import { BastionHostLinux, ISecurityGroup, InstanceClass, InstanceSize, Instance
 import { Architecture, Code, Function, FunctionProps, InlineCode, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import { BundlingOptions, NodejsFunction, NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, LogGroupProps, RetentionDays } from "aws-cdk-lib/aws-logs";
-import { Credentials, DatabaseInstance, DatabaseInstanceEngine, DatabaseInstanceProps, PostgresEngineVersion } from "aws-cdk-lib/aws-rds";
+import { Credentials, DatabaseInstance, DatabaseInstanceEngine, DatabaseInstanceProps, DatabaseInstanceReadReplica, PostgresEngineVersion } from "aws-cdk-lib/aws-rds";
 import { Construct } from "constructs";
 import { ApiDefinition, ApiMetadata, NamedMetadata } from "typizator";
 import { ConnectedResources } from "./";
@@ -245,6 +245,9 @@ export type TSApiDatabaseProperties<T extends ApiDefinition> = TSApiProperties<T
      * Path to the migrtion lambda. Usually the same as for the other lambdas
      */
     migrationLambdaPath?: string,
+    /**
+     * Name of the lambda function handling errors and exceptions
+     */
     errorHandlerLambda?: string,
     /**
      * Properties of the database overriding the defaults of the construct and of CDK
@@ -263,6 +266,10 @@ export type TSApiDatabaseProperties<T extends ApiDefinition> = TSApiProperties<T
      * Optional properties of the VPC overriding the default CDK props
      */
     vpcProps?: Partial<VpcProps>,
+    /**
+     * If `true`, creates a read replica of the database on RDS
+     */
+    readReplica?: boolean,
     /**
      * If defined, creates a Bastion Linux server for manual access to the database through an SSH tunnel
      */
@@ -382,12 +389,18 @@ const createHttpApi = <T extends ApiDefinition>(
 
 const addDatabaseProperties =
     <R extends ApiDefinition>(
-        props: TSApiDatabaseProperties<R> | InnerDependentApiProperties<R>,
-        lambdaProps: NodejsFunctionProps,
-        vpc: Vpc,
-        database: DatabaseInstance,
-        lambdaSG: ISecurityGroup,
-        specificLambdaProperties?: NodejsFunctionProps
+        {
+            props, lambdaProps, vpc, database, lambdaSG, specificLambdaProperties,
+            databaseReadReplica
+        }: {
+            props: TSApiDatabaseProperties<R> | InnerDependentApiProperties<R>,
+            lambdaProps: NodejsFunctionProps,
+            vpc: Vpc,
+            database: DatabaseInstance,
+            lambdaSG: ISecurityGroup,
+            specificLambdaProperties?: NodejsFunctionProps,
+            databaseReadReplica?: DatabaseInstanceReadReplica
+        }
     ) => {
 
         return {
@@ -401,19 +414,25 @@ const addDatabaseProperties =
                 ...specificLambdaProperties?.environment,
                 DB_ENDPOINT_ADDRESS: database!.dbInstanceEndpointAddress,
                 DB_NAME: props.dbProps.databaseName,
-                DB_SECRET_ARN: database!.secret?.secretFullArn
+                DB_SECRET_ARN: database!.secret?.secretFullArn,
+                DB_REPLICA_ENDPOINT_ADDRESS: databaseReadReplica?.dbInstanceEndpointAddress
             },
         } as NodejsFunctionProps;
     }
 
 const connectLambdaToDatabase =
     <R extends ApiDefinition>(
-        database: DatabaseInstance,
-        databaseSG: ISecurityGroup,
-        lambda: NodejsFunction,
-        lambdaSG: ISecurityGroup,
-        props: TSApiDatabaseProperties<R>,
-        camelCasePath: string
+        {
+            database, databaseSG, lambda, lambdaSG, props, camelCasePath
+        }: {
+            database: DatabaseInstance,
+            databaseSG: ISecurityGroup,
+            lambda: NodejsFunction,
+            lambdaSG: ISecurityGroup,
+            props: TSApiDatabaseProperties<R>,
+            camelCasePath: string
+        }
+
     ) => {
         database.secret?.grantRead(lambda);
         databaseSG!.addIngressRule(
@@ -487,17 +506,23 @@ const createTelegrafSetupLambda = <R extends ApiDefinition>(
 }
 
 const createLambda = <R extends ApiDefinition>(
-    scope: Construct,
-    props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
-    subPath: string,
-    sharedLayer: LayerVersion,
-    key: string,
-    filePath: string,
-    specificLambdaProperties?: LambdaProperties,
-    vpc?: Vpc,
-    database?: DatabaseInstance,
-    databaseSG?: ISecurityGroup,
-    lambdaSG?: ISecurityGroup
+    {
+        scope, props, subPath, sharedLayer, key, filePath, specificLambdaProperties, vpc,
+        database, databaseReadReplica, databaseSG, lambdaSG
+    }: {
+        scope: Construct,
+        props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
+        subPath: string,
+        sharedLayer: LayerVersion,
+        key: string,
+        filePath: string,
+        specificLambdaProperties?: LambdaProperties,
+        vpc?: Vpc,
+        database?: DatabaseInstance,
+        databaseReadReplica?: DatabaseInstanceReadReplica,
+        databaseSG?: ISecurityGroup,
+        lambdaSG?: ISecurityGroup
+    }
 ) => {
     const handler = requireHereAndUp(`${filePath}`)[key]
     const resourcesConnected = handler?.connectedResources
@@ -558,12 +583,13 @@ const createLambda = <R extends ApiDefinition>(
     } as NodejsFunctionProps;
 
     if (props.connectDatabase)
-        lambdaProperties = addDatabaseProperties(
-            props,
-            lambdaProperties,
-            vpc!, database!, lambdaSG!,
-            specificLambdaProperties?.nodejsFunctionProps
-        )
+        lambdaProperties = addDatabaseProperties({
+            props: props as any,
+            lambdaProps: lambdaProperties,
+            vpc: vpc!, database: database!, lambdaSG: lambdaSG!,
+            specificLambdaProperties: specificLambdaProperties?.nodejsFunctionProps,
+            databaseReadReplica
+        })
 
     const lambda = new NodejsFunction(
         scope,
@@ -577,7 +603,10 @@ const createLambda = <R extends ApiDefinition>(
     props.telegrafSecret?.grantRead(lambda)
 
     if (props.connectDatabase)
-        connectLambdaToDatabase(database!, databaseSG!, lambda, lambdaProperties.securityGroups![0], props, camelCasePath);
+        connectLambdaToDatabase({
+            database: database!, databaseSG: databaseSG!, lambda,
+            lambdaSG: lambdaProperties.securityGroups![0], props, camelCasePath
+        });
 
     if (specificLambdaProperties?.schedules) {
         specificLambdaProperties.schedules.forEach((schedule, idx) => {
@@ -595,21 +624,27 @@ const createLambda = <R extends ApiDefinition>(
 
 const connectLambda =
     <R extends ApiDefinition>(
-        scope: Construct,
-        props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
-        subPath: string,
-        httpApi: HttpApi,
-        sharedLayer: LayerVersion,
-        key: string,
-        keyKebabCase: string,
-        specificLambdaProperties: LambdaProperties,
-        vpc?: Vpc,
-        database?: DatabaseInstance,
-        databaseSG?: ISecurityGroup,
-        lambdaSG?: ISecurityGroup
+        {
+            scope, props, subPath, httpApi, sharedLayer, key, keyKebabCase, specificLambdaProperties,
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG
+        }: {
+            scope: Construct,
+            props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
+            subPath: string,
+            httpApi: HttpApi,
+            sharedLayer: LayerVersion,
+            key: string,
+            keyKebabCase: string,
+            specificLambdaProperties: LambdaProperties,
+            vpc?: Vpc,
+            database?: DatabaseInstance,
+            databaseReadReplica?: DatabaseInstanceReadReplica,
+            databaseSG?: ISecurityGroup,
+            lambdaSG?: ISecurityGroup
+        }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
-        const lambda = createLambda(
+        const lambda = createLambda({
             scope,
             props,
             subPath,
@@ -618,7 +653,9 @@ const connectLambda =
             filePath,
             specificLambdaProperties,
             vpc,
-            database, databaseSG, lambdaSG)
+            database, databaseSG, lambdaSG,
+            databaseReadReplica
+        })
 
         const lambdaIntegration = new HttpLambdaIntegration(
             `Integration-${props.lambdaPath}-${keyKebabCase}-${subPath.replace("/", "-")}-${props.deployFor}`,
@@ -660,17 +697,23 @@ const fillLocalAccessProperties = (
 
 const createLambdasForApi =
     <R extends ApiDefinition>(
-        scope: Construct,
-        props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
-        subPath: string,
-        apiMetadata: ApiMetadata<R>,
-        httpApi: HttpApi,
-        sharedLayer: LayerVersion,
-        lambdaPropertiesTree?: LambdaPropertiesTree<R>,
-        vpc?: Vpc,
-        database?: DatabaseInstance,
-        databaseSG?: ISecurityGroup,
-        lambdaSG?: ISecurityGroup
+        {
+            scope, props, subPath, apiMetadata, httpApi, sharedLayer, lambdaPropertiesTree,
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG
+        }: {
+            scope: Construct,
+            props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
+            subPath: string,
+            apiMetadata: ApiMetadata<R>,
+            httpApi: HttpApi,
+            sharedLayer: LayerVersion,
+            lambdaPropertiesTree?: LambdaPropertiesTree<R>,
+            vpc?: Vpc,
+            database?: DatabaseInstance,
+            databaseReadReplica?: DatabaseInstanceReadReplica,
+            databaseSG?: ISecurityGroup,
+            lambdaSG?: ISecurityGroup
+        }
     ) => {
         const lambdas = {} as ApiLambdas<R>;
         for (const key of Object.keys(apiMetadata.implementation)) {
@@ -680,34 +723,38 @@ const createLambdasForApi =
             const localAccessProperties = fillLocalAccessProperties(lambdaPropertiesTree, (lambdaPropertiesTree as any)?.[key])
             if (data.dataType === "api")
                 (lambdas as any)[key] = createLambdasForApi(
-                    scope,
-                    props,
-                    `${subPath}/${keyKebabCase}`,
-                    data,
-                    httpApi,
-                    sharedLayer,
                     {
-                        ...(lambdaPropertiesTree as any)?.[key],
-                        ...localAccessProperties
-                    },
-                    vpc,
-                    database, databaseSG, lambdaSG
+                        scope,
+                        props: props as any,
+                        subPath: `${subPath}/${keyKebabCase}`,
+                        apiMetadata: data,
+                        httpApi,
+                        sharedLayer,
+                        lambdaPropertiesTree: {
+                            ...(lambdaPropertiesTree as any)?.[key],
+                            ...localAccessProperties
+                        },
+                        vpc,
+                        database, databaseSG, lambdaSG
+                    }
                 )
             else
                 (lambdas as any)[key] = connectLambda(
-                    scope,
-                    props,
-                    subPath,
-                    httpApi,
-                    sharedLayer,
-                    key as string,
-                    keyKebabCase,
                     {
-                        ...(lambdaPropertiesTree as any)?.[key],
-                        ...localAccessProperties
-                    },
-                    vpc,
-                    database, databaseSG, lambdaSG
+                        scope,
+                        props,
+                        subPath,
+                        httpApi,
+                        sharedLayer,
+                        key: key as string,
+                        keyKebabCase,
+                        specificLambdaProperties: {
+                            ...(lambdaPropertiesTree as any)?.[key],
+                            ...localAccessProperties
+                        },
+                        vpc,
+                        database, databaseReadReplica, databaseSG, lambdaSG
+                    }
                 )
         }
         return lambdas
@@ -726,6 +773,7 @@ export type DependentApiProperties<T extends ApiDefinition> = TSApiProperties<T>
 type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> & {
     connectDatabase: true,
     database: DatabaseInstance,
+    databaseReadReplica?: DatabaseInstanceReadReplica,
     databaseSG: ISecurityGroup,
     lambdaSG: ISecurityGroup,
     dbProps: {
@@ -830,6 +878,7 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
             parentConstruct: undefined,
             connectDatabase: true,
             database: props.parentConstruct.database,
+            databaseReadReplica: props.parentConstruct.databaseReadReplica,
             databaseSG: props.parentConstruct.databaseSG,
             lambdaSG: props.parentConstruct.lambdaSG,
             dbProps: {
@@ -843,14 +892,20 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
         this.apiUrl = apiInfo.domainName!
 
         this.lambdas = createLambdasForApi(
-            this,
-            innerProps, innerProps.apiMetadata.path,
-            innerProps.apiMetadata,
-            this.httpApi,
-            innerProps.sharedLayer,
-            innerProps.lambdaPropertiesTree,
-            innerProps.vpc, innerProps.database, innerProps.databaseSG,
-            innerProps.lambdaSG
+            {
+                scope: this,
+                props: innerProps,
+                subPath: innerProps.apiMetadata.path,
+                apiMetadata: innerProps.apiMetadata,
+                httpApi: this.httpApi,
+                sharedLayer: innerProps.sharedLayer,
+                lambdaPropertiesTree: innerProps.lambdaPropertiesTree,
+                vpc: innerProps.vpc,
+                database: innerProps.database,
+                databaseReadReplica: innerProps.databaseReadReplica,
+                databaseSG: innerProps.databaseSG,
+                lambdaSG: innerProps.lambdaSG
+            }
         )
     }
 }
@@ -875,6 +930,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      * Database instace created by the construct
      */
     readonly database?: DatabaseInstance
+    /**
+     * Database read replica created by the construct
+     */
+    readonly databaseReadReplica?: DatabaseInstanceReadReplica
     /**
      * Security group attached to the database instance created by the construct
      */
@@ -938,6 +997,15 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 maxAllocatedStorage: 50,
                 ...props.dbProps
             })
+            if (props.readReplica) {
+                this.databaseReadReplica = new DatabaseInstanceReadReplica(this, `DBReplica-${props.apiName}-${props.deployFor}`, {
+                    sourceDatabaseInstance: this.database,
+                    instanceType: InstanceType.of(InstanceClass.T3, InstanceSize.MICRO),
+                    vpc: this.vpc,
+                    securityGroups: [this.databaseSG],
+                    ...props.dbProps
+                })
+            }
             this.databaseName = props.dbProps.databaseName
 
             if (props.migrationLambda) {
@@ -953,17 +1021,19 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     throw new Error(`No appropriate migration handler connected for ${filePath}`);
 
                 const migrationLambda = createLambda(
-                    this,
-                    props,
-                    subPath,
-                    this.sharedLayer,
-                    props.migrationLambda,
-                    filePath,
-                    undefined,
-                    this.vpc,
-                    this.database,
-                    this.databaseSG,
-                    this.lambdaSG
+                    {
+                        scope: this,
+                        props: props as any,
+                        subPath,
+                        sharedLayer: this.sharedLayer,
+                        key: props.migrationLambda,
+                        filePath,
+                        vpc: this.vpc,
+                        database: this.database,
+                        databaseReadReplica: this.databaseReadReplica,
+                        databaseSG: this.databaseSG,
+                        lambdaSG: this.lambdaSG
+                    }
                 )
                 const customResourceProvider = new Provider(
                     this, `MigrationResourceProvider-${props.apiName}-${props.deployFor}`, {
@@ -995,13 +1065,15 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             }
         }
 
-        this.lambdas = createLambdasForApi(
-            this,
-            props, "",
-            props.apiMetadata,
-            this.httpApi,
-            this.sharedLayer,
-            props.lambdaPropertiesTree,
-            this.vpc, this.database, this.databaseSG, this.lambdaSG)
+        this.lambdas = createLambdasForApi({
+            scope: this,
+            props, subPath: "",
+            apiMetadata: props.apiMetadata,
+            httpApi: this.httpApi,
+            sharedLayer: this.sharedLayer,
+            lambdaPropertiesTree: props.lambdaPropertiesTree,
+            vpc: this.vpc, database: this.database, databaseSG: this.databaseSG,
+            lambdaSG: this.lambdaSG, databaseReadReplica: this.databaseReadReplica
+        })
     }
 }

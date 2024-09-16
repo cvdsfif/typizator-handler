@@ -35,6 +35,7 @@ describe("Testing a stack with connected database", () => {
                 apiMetadata: connectedApi.metadata,
                 lambdaPath: "tests/lambda",
                 connectDatabase: true,
+                readReplica: true,
                 lambdaProps: {
                     environment: {
                         ENV1: "a"
@@ -69,6 +70,14 @@ describe("Testing a stack with connected database", () => {
             Match.objectLike({
                 "DBName": "TestDatabase",
                 "Engine": "postgres",
+                "MaxAllocatedStorage": 120,
+                "VPCSecurityGroups": [{ "Fn::GetAtt": [Match.stringLikeRegexp("SimpleApiSGTSTestApi"), "GroupId"] }]
+            })
+        )
+
+        template.hasResourceProperties("AWS::RDS::DBInstance",
+            Match.objectLike({
+                "DBSubnetGroupName": { "Ref": Match.stringLikeRegexp("SimpleApiDBReplicaTSTest") },
                 "MaxAllocatedStorage": 120,
                 "VPCSecurityGroups": [{ "Fn::GetAtt": [Match.stringLikeRegexp("SimpleApiSGTSTestApi"), "GroupId"] }]
             })

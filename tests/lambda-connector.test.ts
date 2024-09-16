@@ -22,6 +22,7 @@ describe("Test the lambda connector against a mock environment", () => {
     }
 
     let getDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
+    let getReplicaDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
     let DB_APP_NAME: string
     let MIN_CONNECTION_IDLE_TIME_SEC: number
     let MAX_CONNECTIONS: number
@@ -77,6 +78,17 @@ describe("Test the lambda connector against a mock environment", () => {
                 databaseConnected: true
             }
         )
+        getReplicaDataHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                const result = await props.db!.client.query("SELECT 1 as one");
+                return result.rows[0].one;
+            },
+            {
+                databaseConnected: true,
+                useDatabaseReplica: true
+            }
+        )
         DB_APP_NAME = handlers.DB_APP_NAME
         MIN_CONNECTION_IDLE_TIME_SEC = handlers.MIN_CONNECTION_IDLE_TIME_SEC
         MAX_CONNECTIONS = handlers.MAX_CONNECTIONS
@@ -104,6 +116,31 @@ describe("Test the lambda connector against a mock environment", () => {
                 user: "postgres",
                 database: "db",
                 host: "http://xxx",
+                password: "secret",
+                port: 5432,
+                ssl: {
+                    rejectUnauthorized: false
+                },
+                delayMs: 3000,
+                application_name: DB_APP_NAME,
+                minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
+                maxConnections: MAX_CONNECTIONS,
+                manualMaxConnections: true
+            }])
+    })
+
+    test("Should correctly configure the database with read replica", async () => {
+        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
+        process.env.DB_REPLICA_ENDPOINT_ADDRESS = "http://xxx.replica"
+        process.env.DB_NAME = "db"
+        process.env.DB_SECRET_ARN = "arn"
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        expect(await getReplicaDataHandler({ body: "" })).toEqual({ data: "1" })
+        expect(mockValues.clientPassedArgs).toEqual([
+            {
+                user: "postgres",
+                database: "db",
+                host: "http://xxx.replica",
                 password: "secret",
                 port: 5432,
                 ssl: {
