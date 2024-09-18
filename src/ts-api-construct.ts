@@ -2,7 +2,7 @@ import { CustomResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib
 import { CorsHttpMethod, DomainName, HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { BastionHostLinux, ISecurityGroup, InstanceClass, InstanceSize, InstanceType, Peer, Port, SecurityGroup, SubnetType, Vpc, VpcProps } from "aws-cdk-lib/aws-ec2";
-import { Architecture, Code, Function, FunctionProps, InlineCode, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
+import { Architecture, Code, Function, FunctionProps, ILayerVersion, InlineCode, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import { BundlingOptions, NodejsFunction, NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, LogGroupProps, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Credentials, DatabaseInstance, DatabaseInstanceEngine, DatabaseInstanceProps, DatabaseInstanceReadReplica, PostgresEngineVersion } from "aws-cdk-lib/aws-rds";
@@ -17,6 +17,7 @@ import { ARecord, HostedZone, IHostedZone, RecordTarget } from "aws-cdk-lib/aws-
 import { Certificate, CertificateValidation } from "aws-cdk-lib/aws-certificatemanager";
 import { ApiGatewayv2DomainProperties } from "aws-cdk-lib/aws-route53-targets";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { IManagedPolicy, ManagedPolicy } from "aws-cdk-lib/aws-iam";
 
 const connectedTelegramWebhooks = new Set<string>()
 
@@ -210,13 +211,7 @@ export type TSApiProperties<T extends ApiDefinition> = {
     /**
      * If defined, lists the secrets to inject into the concerned lambdas
      */
-    secrets?: Secret[] & { 0: Secret },
-    /**
-     * If defined, creates a telegraf instance with the bot ID stored in the secret passed to this field
-     * 
-     * @deprecated Telegraf connection are now managed at the individual API functions level
-     */
-    telegrafSecret?: Secret
+    secrets?: Secret[] & { 0: Secret }
 }
 
 /**
@@ -508,7 +503,7 @@ const createTelegrafSetupLambda = <R extends ApiDefinition>(
 const createLambda = <R extends ApiDefinition>(
     {
         scope, props, subPath, sharedLayer, key, filePath, specificLambdaProperties, vpc,
-        database, databaseReadReplica, databaseSG, lambdaSG
+        database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
     }: {
         scope: Construct,
         props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -521,7 +516,9 @@ const createLambda = <R extends ApiDefinition>(
         database?: DatabaseInstance,
         databaseReadReplica?: DatabaseInstanceReadReplica,
         databaseSG?: ISecurityGroup,
-        lambdaSG?: ISecurityGroup
+        lambdaSG?: ISecurityGroup,
+        insightsLayer: ILayerVersion,
+        insightsLayerPolicy: IManagedPolicy
     }
 ) => {
     const handler = requireHereAndUp(`${filePath}`)[key]
@@ -540,7 +537,7 @@ const createLambda = <R extends ApiDefinition>(
         throw new Error(`Trying to inject secrets on a stack without secrets`);
 
     const connectedTelegraf = connectedResourcesArray.includes(ConnectedResources.TELEGRAF.toString())
-    if (!specificLambdaProperties?.telegrafSecret && !props.telegrafSecret && connectedTelegraf)
+    if (!specificLambdaProperties?.telegrafSecret && connectedTelegraf)
         throw new Error(`Trying to connect telegraf to a lambda on a non-connected stack in ${filePath}`)
 
     const camelCasePath = kebabToCamel(filePath.replace("/", "-"))
@@ -561,7 +558,7 @@ const createLambda = <R extends ApiDefinition>(
         architecture: DEFAULT_ARCHITECTURE,
         timeout: Duration.seconds(60),
         logGroup,
-        layers: [sharedLayer, ...(specificLambdaProperties?.extraLayers ?? props.extraLayers ?? [])],
+        layers: [sharedLayer, insightsLayer, ...(specificLambdaProperties?.extraLayers ?? props.extraLayers ?? [])],
         bundling: {
             minify: true,
             sourceMap: false,
@@ -578,7 +575,7 @@ const createLambda = <R extends ApiDefinition>(
             FB_SECRET_ARN: connectFirebase ? props.firebaseAdminConnect?.secret.secretArn : undefined,
             FB_DATABASE_NAME: connectFirebase ? props.firebaseAdminConnect?.internalDatabaseName : undefined,
             SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
-            TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn ?? props.telegrafSecret?.secretArn
+            TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn
         }
     } as NodejsFunctionProps;
 
@@ -596,17 +593,17 @@ const createLambda = <R extends ApiDefinition>(
         `TSApiLambda-${camelCasePath}${props.deployFor}`,
         lambdaProperties
     )
+    lambda.role?.addManagedPolicy(insightsLayerPolicy)
 
     if (connectFirebase) props.firebaseAdminConnect?.secret.grantRead(lambda)
     if (connectedSecrets) props.secrets?.forEach(secret => secret.grantRead(lambda))
     specificLambdaProperties?.telegrafSecret?.grantRead(lambda)
-    props.telegrafSecret?.grantRead(lambda)
 
     if (props.connectDatabase)
         connectLambdaToDatabase({
             database: database!, databaseSG: databaseSG!, lambda,
             lambdaSG: lambdaProperties.securityGroups![0], props, camelCasePath
-        });
+        })
 
     if (specificLambdaProperties?.schedules) {
         specificLambdaProperties.schedules.forEach((schedule, idx) => {
@@ -626,7 +623,7 @@ const connectLambda =
     <R extends ApiDefinition>(
         {
             scope, props, subPath, httpApi, sharedLayer, key, keyKebabCase, specificLambdaProperties,
-            vpc, database, databaseReadReplica, databaseSG, lambdaSG
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -640,7 +637,9 @@ const connectLambda =
             database?: DatabaseInstance,
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
-            lambdaSG?: ISecurityGroup
+            lambdaSG?: ISecurityGroup,
+            insightsLayer: ILayerVersion,
+            insightsLayerPolicy: IManagedPolicy
         }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -654,7 +653,8 @@ const connectLambda =
             specificLambdaProperties,
             vpc,
             database, databaseSG, lambdaSG,
-            databaseReadReplica
+            databaseReadReplica,
+            insightsLayer, insightsLayerPolicy
         })
 
         const lambdaIntegration = new HttpLambdaIntegration(
@@ -699,7 +699,7 @@ const createLambdasForApi =
     <R extends ApiDefinition>(
         {
             scope, props, subPath, apiMetadata, httpApi, sharedLayer, lambdaPropertiesTree,
-            vpc, database, databaseReadReplica, databaseSG, lambdaSG
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -712,7 +712,9 @@ const createLambdasForApi =
             database?: DatabaseInstance,
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
-            lambdaSG?: ISecurityGroup
+            lambdaSG?: ISecurityGroup,
+            insightsLayer: ILayerVersion,
+            insightsLayerPolicy: IManagedPolicy
         }
     ) => {
         const lambdas = {} as ApiLambdas<R>;
@@ -735,7 +737,8 @@ const createLambdasForApi =
                             ...localAccessProperties
                         },
                         vpc,
-                        database, databaseSG, lambdaSG
+                        database, databaseSG, lambdaSG,
+                        insightsLayer, insightsLayerPolicy
                     }
                 )
             else
@@ -753,7 +756,8 @@ const createLambdasForApi =
                             ...localAccessProperties
                         },
                         vpc,
-                        database, databaseReadReplica, databaseSG, lambdaSG
+                        database, databaseReadReplica, databaseSG, lambdaSG,
+                        insightsLayer, insightsLayerPolicy
                     }
                 )
         }
@@ -780,7 +784,9 @@ type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> &
         databaseName: string
     },
     vpc: Vpc,
-    sharedLayer: LayerVersion
+    sharedLayer: LayerVersion,
+    insightsLayer: ILayerVersion,
+    insightsLayerPolicy: IManagedPolicy
 }
 
 const listLambdaArchitectures =
@@ -885,7 +891,9 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
                 databaseName: props.parentConstruct.databaseName
             },
             vpc: props.parentConstruct.vpc,
-            sharedLayer: this.sharedLayer
+            sharedLayer: this.sharedLayer,
+            insightsLayer: props.parentConstruct.insightsLayer,
+            insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy
         } as InnerDependentApiProperties<T>
         const apiInfo = createHttpApi(this, innerProps, kebabToCamel(innerProps.apiMetadata.path.replace("/", "-")))
         this.httpApi = apiInfo.api
@@ -904,7 +912,9 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
                 database: innerProps.database,
                 databaseReadReplica: innerProps.databaseReadReplica,
                 databaseSG: innerProps.databaseSG,
-                lambdaSG: innerProps.lambdaSG
+                lambdaSG: innerProps.lambdaSG,
+                insightsLayer: innerProps.insightsLayer,
+                insightsLayerPolicy: innerProps.insightsLayerPolicy
             }
         )
     }
@@ -954,6 +964,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      * Bastion host resource, if configured
      */
     readonly bastion?: BastionHostLinux
+    readonly insightsLayer: ILayerVersion
+    readonly insightsLayerPolicy: IManagedPolicy
 
     private readonly sharedLayer?: LayerVersion
 
@@ -979,6 +991,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             props.lambdaProps,
             props.lambdaPropertiesTree
         )
+
+        const insightsLayerArn = `arn:aws:lambda:us-west-1:580247275435:layer:LambdaInsightsExtension:12`
+        this.insightsLayer = LayerVersion.fromLayerVersionArn(this, 'LayerFromArn', insightsLayerArn);
+        this.insightsLayerPolicy = ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLambdaInsightsExecutionRolePolicy')
 
         if (props.connectDatabase) {
             const vpc = this.vpc = new Vpc(this, `VPC-${props.apiName}-${props.deployFor}`, {
@@ -1032,7 +1048,9 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                         database: this.database,
                         databaseReadReplica: this.databaseReadReplica,
                         databaseSG: this.databaseSG,
-                        lambdaSG: this.lambdaSG
+                        lambdaSG: this.lambdaSG,
+                        insightsLayer: this.insightsLayer,
+                        insightsLayerPolicy: this.insightsLayerPolicy
                     }
                 )
                 const customResourceProvider = new Provider(
@@ -1073,7 +1091,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             sharedLayer: this.sharedLayer,
             lambdaPropertiesTree: props.lambdaPropertiesTree,
             vpc: this.vpc, database: this.database, databaseSG: this.databaseSG,
-            lambdaSG: this.lambdaSG, databaseReadReplica: this.databaseReadReplica
+            lambdaSG: this.lambdaSG, databaseReadReplica: this.databaseReadReplica,
+            insightsLayer: this.insightsLayer, insightsLayerPolicy: this.insightsLayerPolicy
         })
     }
 }
