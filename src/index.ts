@@ -386,8 +386,7 @@ export type ConnectorProperties = {
     telegraf?: boolean
 }
 
-const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: (event: HandlerEvent) => Promise<HandlerResponse>) => {
-    console.log("Props", props)
+const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) => {
     const connectedResources = [] as ConnectedResources[]
     if (props.databaseConnected) {
         connectedResources.push(ConnectedResources.DATABASE)
@@ -401,8 +400,7 @@ const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: (event
     if (props.telegraf) {
         connectedResources.push(ConnectedResources.TELEGRAF)
     }
-    console.log("Connected resources", connectedResources);
-    (fn as any).connectedResources = connectedResources
+    fn.connectedResources = connectedResources
 }
 
 const setupProps = async (event: HandlerEvent, connectorProps: ConnectorProperties) => {
@@ -459,6 +457,12 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
     connectorProps = { databaseConnected: false } as ConnectorProperties
 ): (event: HandlerEvent) => Promise<HandlerResponse> => {
+    if (process.env.CDK_PHASE === "build") {
+        const placeholder = {}
+        fillConnectedResourcesProperties(connectorProps, placeholder)
+        return placeholder as any
+    }
+
     process.on("SIGTERM", async () => {
         console.log("SIGTERM received, shutting down lambda")
         process.exit(0)

@@ -291,7 +291,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                 "Description": "Test Typescript API - /meow (test)",
                 "Layers": [
                     { "Ref": Match.stringLikeRegexp("SimpleApiSharedLayer") },
-                    "arn:aws:lambda:us-west-1:580247275435:layer:LambdaInsightsExtension:12"
+                    //"arn:aws:lambda:us-west-1:580247275435:layer:LambdaInsightsExtension:12"
                 ]
             })
         );

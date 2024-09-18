@@ -503,7 +503,7 @@ const createTelegrafSetupLambda = <R extends ApiDefinition>(
 const createLambda = <R extends ApiDefinition>(
     {
         scope, props, subPath, sharedLayer, key, filePath, specificLambdaProperties, vpc,
-        database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
+        database, databaseReadReplica, databaseSG, lambdaSG//, insightsLayer, insightsLayerPolicy
     }: {
         scope: Construct,
         props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -517,8 +517,8 @@ const createLambda = <R extends ApiDefinition>(
         databaseReadReplica?: DatabaseInstanceReadReplica,
         databaseSG?: ISecurityGroup,
         lambdaSG?: ISecurityGroup,
-        insightsLayer: ILayerVersion,
-        insightsLayerPolicy: IManagedPolicy
+        //insightsLayer: ILayerVersion,
+        //insightsLayerPolicy: IManagedPolicy
     }
 ) => {
     const handler = requireHereAndUp(`${filePath}`)[key]
@@ -558,7 +558,7 @@ const createLambda = <R extends ApiDefinition>(
         architecture: DEFAULT_ARCHITECTURE,
         timeout: Duration.seconds(60),
         logGroup,
-        layers: [sharedLayer, insightsLayer, ...(specificLambdaProperties?.extraLayers ?? props.extraLayers ?? [])],
+        layers: [sharedLayer, /*insightsLayer,*/ ...(specificLambdaProperties?.extraLayers ?? props.extraLayers ?? [])],
         bundling: {
             minify: true,
             sourceMap: false,
@@ -593,7 +593,7 @@ const createLambda = <R extends ApiDefinition>(
         `TSApiLambda-${camelCasePath}${props.deployFor}`,
         lambdaProperties
     )
-    lambda.role?.addManagedPolicy(insightsLayerPolicy)
+    // lambda.role?.addManagedPolicy(insightsLayerPolicy)
 
     if (connectFirebase) props.firebaseAdminConnect?.secret.grantRead(lambda)
     if (connectedSecrets) props.secrets?.forEach(secret => secret.grantRead(lambda))
@@ -623,7 +623,7 @@ const connectLambda =
     <R extends ApiDefinition>(
         {
             scope, props, subPath, httpApi, sharedLayer, key, keyKebabCase, specificLambdaProperties,
-            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG/*, insightsLayer, insightsLayerPolicy*/
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -638,8 +638,8 @@ const connectLambda =
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
             lambdaSG?: ISecurityGroup,
-            insightsLayer: ILayerVersion,
-            insightsLayerPolicy: IManagedPolicy
+            //insightsLayer: ILayerVersion,
+            //insightsLayerPolicy: IManagedPolicy
         }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -654,7 +654,7 @@ const connectLambda =
             vpc,
             database, databaseSG, lambdaSG,
             databaseReadReplica,
-            insightsLayer, insightsLayerPolicy
+            //insightsLayer, insightsLayerPolicy
         })
 
         const lambdaIntegration = new HttpLambdaIntegration(
@@ -699,7 +699,7 @@ const createLambdasForApi =
     <R extends ApiDefinition>(
         {
             scope, props, subPath, apiMetadata, httpApi, sharedLayer, lambdaPropertiesTree,
-            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG//, insightsLayer, insightsLayerPolicy
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -713,8 +713,8 @@ const createLambdasForApi =
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
             lambdaSG?: ISecurityGroup,
-            insightsLayer: ILayerVersion,
-            insightsLayerPolicy: IManagedPolicy
+            //insightsLayer: ILayerVersion,
+            //insightsLayerPolicy: IManagedPolicy
         }
     ) => {
         const lambdas = {} as ApiLambdas<R>;
@@ -738,7 +738,7 @@ const createLambdasForApi =
                         },
                         vpc,
                         database, databaseSG, lambdaSG,
-                        insightsLayer, insightsLayerPolicy
+                        //insightsLayer, insightsLayerPolicy
                     }
                 )
             else
@@ -757,7 +757,7 @@ const createLambdasForApi =
                         },
                         vpc,
                         database, databaseReadReplica, databaseSG, lambdaSG,
-                        insightsLayer, insightsLayerPolicy
+                        //insightsLayer, insightsLayerPolicy
                     }
                 )
         }
@@ -785,8 +785,8 @@ type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> &
     },
     vpc: Vpc,
     sharedLayer: LayerVersion,
-    insightsLayer: ILayerVersion,
-    insightsLayerPolicy: IManagedPolicy
+    //insightsLayer: ILayerVersion,
+    //insightsLayerPolicy: IManagedPolicy
 }
 
 const listLambdaArchitectures =
@@ -892,8 +892,8 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
             },
             vpc: props.parentConstruct.vpc,
             sharedLayer: this.sharedLayer,
-            insightsLayer: props.parentConstruct.insightsLayer,
-            insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy
+            //insightsLayer: props.parentConstruct.insightsLayer,
+            //insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy
         } as InnerDependentApiProperties<T>
         const apiInfo = createHttpApi(this, innerProps, kebabToCamel(innerProps.apiMetadata.path.replace("/", "-")))
         this.httpApi = apiInfo.api
@@ -913,8 +913,8 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
                 databaseReadReplica: innerProps.databaseReadReplica,
                 databaseSG: innerProps.databaseSG,
                 lambdaSG: innerProps.lambdaSG,
-                insightsLayer: innerProps.insightsLayer,
-                insightsLayerPolicy: innerProps.insightsLayerPolicy
+                //insightsLayer: innerProps.insightsLayer,
+                //insightsLayerPolicy: innerProps.insightsLayerPolicy
             }
         )
     }
@@ -964,8 +964,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      * Bastion host resource, if configured
      */
     readonly bastion?: BastionHostLinux
-    readonly insightsLayer: ILayerVersion
-    readonly insightsLayerPolicy: IManagedPolicy
+    //readonly insightsLayer: ILayerVersion
+    //readonly insightsLayerPolicy: IManagedPolicy
 
     private readonly sharedLayer?: LayerVersion
 
@@ -977,6 +977,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      */
     constructor(scope: Construct, id: string, props: TsApiGenericProperties<T>) {
         super(scope, id)
+
+        process.env.CDK_PHASE = "build"
 
         const apiInfo = createHttpApi(this, props)
         this.httpApi = apiInfo.api
@@ -992,9 +994,9 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             props.lambdaPropertiesTree
         )
 
-        const insightsLayerArn = `arn:aws:lambda:us-west-1:580247275435:layer:LambdaInsightsExtension:12`
-        this.insightsLayer = LayerVersion.fromLayerVersionArn(this, 'LayerFromArn', insightsLayerArn);
-        this.insightsLayerPolicy = ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLambdaInsightsExecutionRolePolicy')
+        //const insightsLayerArn = `arn:aws:lambda:us-west-1:580247275435:layer:LambdaInsightsExtension:12`
+        //this.insightsLayer = LayerVersion.fromLayerVersionArn(this, 'LayerFromArn', insightsLayerArn);
+        //this.insightsLayerPolicy = ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLambdaInsightsExecutionRolePolicy')
 
         if (props.connectDatabase) {
             const vpc = this.vpc = new Vpc(this, `VPC-${props.apiName}-${props.deployFor}`, {
@@ -1049,8 +1051,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                         databaseReadReplica: this.databaseReadReplica,
                         databaseSG: this.databaseSG,
                         lambdaSG: this.lambdaSG,
-                        insightsLayer: this.insightsLayer,
-                        insightsLayerPolicy: this.insightsLayerPolicy
+                        //insightsLayer: this.insightsLayer,
+                        //insightsLayerPolicy: this.insightsLayerPolicy
                     }
                 )
                 const customResourceProvider = new Provider(
@@ -1092,7 +1094,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             lambdaPropertiesTree: props.lambdaPropertiesTree,
             vpc: this.vpc, database: this.database, databaseSG: this.databaseSG,
             lambdaSG: this.lambdaSG, databaseReadReplica: this.databaseReadReplica,
-            insightsLayer: this.insightsLayer, insightsLayerPolicy: this.insightsLayerPolicy
+            //insightsLayer: this.insightsLayer, insightsLayerPolicy: this.insightsLayerPolicy
         })
     }
 }
