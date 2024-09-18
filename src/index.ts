@@ -387,6 +387,7 @@ export type ConnectorProperties = {
 }
 
 const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: (event: HandlerEvent) => Promise<HandlerResponse>) => {
+    console.log("Props", props)
     const connectedResources = [] as ConnectedResources[]
     if (props.databaseConnected) {
         connectedResources.push(ConnectedResources.DATABASE)
@@ -400,6 +401,7 @@ const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: (event
     if (props.telegraf) {
         connectedResources.push(ConnectedResources.TELEGRAF)
     }
+    console.log("Connected resources", connectedResources);
     (fn as any).connectedResources = connectedResources
 }
 
