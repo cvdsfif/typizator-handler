@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 4.0.0-beta.5 - 2024-09-18
+
 ## 4.0.0-beta.4 - 2024-09-18
 Insights layer added to lambda functions
 
