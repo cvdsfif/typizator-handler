@@ -649,4 +649,24 @@ describe("Test interfaces behaviour on a real database", () => {
         // AND the Telegram handler is not invoked
         expect(telegrafHandlerMock).not.toHaveBeenCalled()
     })
+
+    test("Should correctly invoike a teardown handler", async () => {
+        // GIVEN the lambda connector set up
+        handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async () => { },
+            {
+                telegraf: true
+            }
+        )
+
+        // AND our test intercepts the process' exit call
+        const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => { }) as any);
+
+        // WHEN sending the termination signal
+        process.emit("SIGTERM")
+
+        // THEN the process exits with the code 0
+        expect(mockExit).toHaveBeenCalledWith(0);
+    })
 })

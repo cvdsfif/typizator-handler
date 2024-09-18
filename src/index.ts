@@ -218,70 +218,6 @@ export enum ConnectedResources {
     TELEGRAF = "TELEGRAF"
 }
 
-const defaultHandler = <T extends FunctionCallDefinition>(
-    definition: T & { metadata: FunctionMetadata },
-    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
-    connectedResources: ConnectedResources[],
-    setupProps: (event: HandlerEvent) => Promise<HandlerProps>,
-    teardownProps: (props: HandlerProps) => Promise<void>,
-    errorHandler?: (error: any, props: HandlerProps, metadata: NamedMetadata) => Promise<void>,
-    authenticator?: (props: HandlerProps, securityToken: string, rights: AccessRights) => Promise<boolean>)
-
-    :
-
-    ((event: HandlerEvent) => Promise<HandlerResponse>) => {
-
-    const fn = async (event: HandlerEvent) => {
-        if (event.body === PING) return { data: describeJsonFunction(definition) }
-        let props = {} as HandlerProps
-        try {
-            props = await setupProps(event)
-            const ipVar = process.env.IP_LIST
-            if (ipVar) {
-                const ipList = JSON.parse(ipVar)
-                const clientIp = event.headers?.["x-forwarded-for"]
-                if (!ipList.some((address: string) => address === clientIp)) {
-                    return {
-                        statusCode: 401,
-                        body: "Unauthorized",
-                        data: ""
-                    }
-                }
-            }
-            const securityToken = event.headers?.["x-security-token"]?.trim()
-            const accessRights = {
-                mask: intS.optional.unbox(process.env.ACCESS_MASK)
-            }
-            if (authenticator && accessRights.mask !== undefined) {
-                if (!securityToken || !(await authenticator(props, securityToken, accessRights)))
-                    return {
-                        statusCode: 401,
-                        body: "Unauthorized",
-                        data: ""
-                    }
-            }
-            const callResult = await callImplementation(event.body, definition, implementation, props)
-            return ({ data: callResult })
-        } catch (e: any) {
-            if (errorHandler) await errorHandler(e, props, {
-                name: definition.metadata.name,
-                path: definition.metadata.path
-            })
-            else {
-                console.error(`Error caught: ${e.message ?? e}`);
-                console.error(e.stack);
-            }
-            return JSONBig.stringify({
-                errorMessage: `Handler error: ${e.message ?? e}`
-            })
-        } finally {
-            await teardownProps(props)
-        }
-    }
-    fn.connectedResources = connectedResources
-    return fn
-}
-
 const loadSecrets = async () => {
     const listOfSecrets = process.env.SECRETS_LIST
     if (!listOfSecrets)
@@ -450,13 +386,8 @@ export type ConnectorProperties = {
     telegraf?: boolean
 }
 
-export const lambdaConnector = <T extends FunctionCallDefinition>(
-    definition: T & { metadata: FunctionMetadata },
-    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
-    props = { databaseConnected: false } as ConnectorProperties
-): (event: HandlerEvent) => Promise<HandlerResponse> => {
+const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: (event: HandlerEvent) => Promise<HandlerResponse>) => {
     const connectedResources = [] as ConnectedResources[]
-
     if (props.databaseConnected) {
         connectedResources.push(ConnectedResources.DATABASE)
     }
@@ -469,45 +400,100 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     if (props.telegraf) {
         connectedResources.push(ConnectedResources.TELEGRAF)
     }
+    (fn as any).connectedResources = connectedResources
+}
 
-    const setupProps = async (event: HandlerEvent) => {
-        const handlerProps = { event } as HandlerProps
-        if (props.databaseConnected) {
-            const { client, replicaClient } = await connectPostgresDb(props)
-            handlerProps.db = connectDatabase(client)
-            if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
-        }
-        if (props.firebaseAdminConnected) {
-            handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
-        }
-        if (props.secretsUsed) {
-            handlerProps.secrets = await loadSecrets()
-        }
-        if (props.telegraf) {
-            handlerProps.telegraf = await createTelegrafConnection()
-        }
-        return handlerProps
+const setupProps = async (event: HandlerEvent, connectorProps: ConnectorProperties) => {
+    const handlerProps = { event } as HandlerProps
+    if (connectorProps.databaseConnected) {
+        const { client, replicaClient } = await connectPostgresDb(connectorProps)
+        handlerProps.db = connectDatabase(client)
+        if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
     }
+    if (connectorProps.firebaseAdminConnected) {
+        handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
+    }
+    if (connectorProps.secretsUsed) {
+        handlerProps.secrets = await loadSecrets()
+    }
+    if (connectorProps.telegraf) {
+        handlerProps.telegraf = await createTelegrafConnection()
+    }
+    return handlerProps
+}
 
-    const teardownProps = async (handlerProps: HandlerProps) => {
-        if (props.telegraf && handlerProps.telegraf) {
-            const body = JSON.parse(handlerProps.event!.body)
-            await handlerProps.telegraf.handleUpdate(body)
-        }
-        if (props.databaseConnected) {
-            await handlerProps.db?.client.clean()
+const teardownProps = async (handlerProps: HandlerProps, connectorProps: ConnectorProperties) => {
+    if (connectorProps.telegraf && handlerProps.telegraf) {
+        const body = JSON.parse(handlerProps.event!.body)
+        await handlerProps.telegraf.handleUpdate(body)
+    }
+    if (connectorProps.databaseConnected) {
+        await handlerProps.db?.client.clean()
+    }
+}
+
+const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: HandlerEvent, props: HandlerProps) => {
+    const ipVar = process.env.IP_LIST
+    if (ipVar) {
+        const ipList = JSON.parse(ipVar)
+        const clientIp = event.headers?.["x-forwarded-for"]
+        if (!ipList.some((address: string) => address === clientIp)) {
+            return false
         }
     }
+    const securityToken = event.headers?.["x-security-token"]?.trim()
+    const accessRights = {
+        mask: intS.optional.unbox(process.env.ACCESS_MASK)
+    }
+    if (connectorProps.authenticator && accessRights.mask !== undefined) {
+        if (!securityToken || !(await connectorProps.authenticator(props, securityToken, accessRights)))
+            return false
+    }
+    return true
+}
 
-    return defaultHandler(
-        definition,
-        implementation,
-        connectedResources,
-        setupProps,
-        teardownProps,
-        props.errorHandler,
-        props.authenticator
-    )
+export const lambdaConnector = <T extends FunctionCallDefinition>(
+    definition: T & { metadata: FunctionMetadata },
+    implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
+    connectorProps = { databaseConnected: false } as ConnectorProperties
+): (event: HandlerEvent) => Promise<HandlerResponse> => {
+    process.on("SIGTERM", async () => {
+        console.log("SIGTERM received, shutting down lambda")
+        process.exit(0)
+    })
+
+    const fn = async (event: HandlerEvent) => {
+        if (event.body === PING) return { data: describeJsonFunction(definition) }
+        let props = {} as HandlerProps
+        try {
+            props = await setupProps(event, connectorProps)
+            if (!(await isRequestAuthorized(connectorProps, event, props))) {
+                return {
+                    statusCode: 401,
+                    body: "Unauthorized",
+                    data: ""
+                }
+            }
+            const callResult = await callImplementation(event.body, definition, implementation, props)
+            return ({ data: callResult })
+        } catch (e: any) {
+            if (connectorProps.errorHandler) await connectorProps.errorHandler(e, props, {
+                name: definition.metadata.name,
+                path: definition.metadata.path
+            })
+            else {
+                console.error(`Error caught: ${e.message ?? e}`);
+                console.error(e.stack);
+            }
+            return JSONBig.stringify({
+                errorMessage: `Handler error: ${e.message ?? e}`
+            })
+        } finally {
+            await teardownProps(props, connectorProps)
+        }
+    }
+    fillConnectedResourcesProperties(connectorProps, fn)
+    return fn
 }
 
 
