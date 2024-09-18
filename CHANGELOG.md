@@ -5,7 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-Lambda teardown interception point added
+Insights layer added to lambda functions
+
+## 4.0.0-beta.3 - 2024-09-18
+Lambda teardown interception point added"
 
 ## 4.0.0-beta.2 - 2024-09-16
 Database replica injection, inluding separate access to main and read replica
