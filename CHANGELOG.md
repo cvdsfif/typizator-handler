@@ -5,10 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-
-## 4.0.0-beta.6 - 2024-09-18
-
-## 4.0.0-beta.5 - 2024-09-18
+Insights layer made configurable
 
 ## 4.0.0-beta.4 - 2024-09-18
 Insights layer added to lambda functions
@@ -18,8 +15,6 @@ Lambda teardown interception point added"
 
 ## 4.0.0-beta.2 - 2024-09-16
 Database replica injection, inluding separate access to main and read replica
-
-## 4.0.0-beta.1 - 2024-09-16
 
 ## 4.0.0-beta.0 - 2024-09-14
 Merged with cdk-typescript-lib
