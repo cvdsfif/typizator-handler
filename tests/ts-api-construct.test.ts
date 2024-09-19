@@ -20,7 +20,8 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         }
     }
 
-    let template: Template;
+    let template: Template
+    const lambdaInsightsArn = "arn:aws:lambda:eu-west-2:580247275435:layer:LambdaInsightsExtension-Arm64:20"
 
     beforeEach(() => {
         const app = new App();
@@ -48,6 +49,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             ENV1: "a"
                         }
                     },
+                    lambdaInsightsArn,
                     extraBundling: {
                         minify: true,
                         sourceMap: false,
@@ -240,8 +242,8 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         expect(allLogGroups[noMeowLogGroupKey!].DeletionPolicy).toEqual("Snapshot")
 
         // Create a separate stack with updated Lambda config
-        const app = new App();
-        const props = { deployFor: "staging" };
+        const app = new App()
+        const props = { deployFor: "staging" }
         const stack = new TestStack(
             app, "TestedStack", props,
             (stack: Stack) => new TSApiConstruct(stack, "SimpleApi",
@@ -291,7 +293,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                 "Description": "Test Typescript API - /meow (test)",
                 "Layers": [
                     { "Ref": Match.stringLikeRegexp("SimpleApiSharedLayer") },
-                    "arn:aws:lambda:us-west-1:580247275435:layer:LambdaInsightsExtension:12"
+                    lambdaInsightsArn
                 ]
             })
         );
