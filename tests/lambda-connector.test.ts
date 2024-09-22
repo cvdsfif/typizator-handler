@@ -67,15 +67,11 @@ describe("Test the lambda connector against a mock environment", () => {
                 databaseConnected: true
             }
         )
-        const getTelegrafDataHandler = () => handlers.lambdaConnector(
+        const getEmptyDataHandler = () => handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
-                const result = await props.db!.client.query("SELECT 1 as one");
-                return result.rows[0].one;
-            },
-            {
-                databaseConnected: true,
-                telegraf: true
+                console.log("Empty connector invoked")
+                return ""
             }
         )
         const getReplicaDataHandler = () => handlers.lambdaConnector(
@@ -105,7 +101,7 @@ describe("Test the lambda connector against a mock environment", () => {
         MAX_CONNECTIONS = handlers.MAX_CONNECTIONS
 
         return {
-            getDataHandler, getReplicaDataHandler, getSeparateReplicaDataHandler, getTelegrafDataHandler
+            getDataHandler, getReplicaDataHandler, getSeparateReplicaDataHandler, getEmptyDataHandler
         }
     }
 
@@ -131,6 +127,18 @@ describe("Test the lambda connector against a mock environment", () => {
 
     afterEach(async () => {
         process.env = externalEnvironment!
+    })
+
+    test("Should invoke the function placeholder", async () => {
+        process.env.CDK_PHASE = "build"
+        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
+        process.env.DB_NAME = "db"
+        process.env.DB_SECRET_ARN = "arn"
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        const { getEmptyDataHandler } = await init()
+
+        expect(await getEmptyDataHandler()({ body: "" })).toEqual({ data: "\"\"" })
+        process.env.CDK_PHASE = undefined
     })
 
     test("Should correctly configure the database", async () => {

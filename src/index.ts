@@ -453,7 +453,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     connectorProps = { databaseConnected: false } as ConnectorProperties
 ): (event: HandlerEvent) => Promise<HandlerResponse> => {
     if (process.env.CDK_PHASE === "build") {
-        const placeholder = {}
+        const placeholder = (async (event: HandlerEvent) => {
+            return ({ data: await callImplementation(event.body, definition, implementation, {}) })
+        }) as any
         fillConnectedResourcesProperties(connectorProps, placeholder)
         return placeholder as any
     }
