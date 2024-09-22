@@ -1,5 +1,4 @@
 import { apiS, intS } from "typizator"
-import { HandlerEvent, HandlerResponse } from "../src/handler-objects"
 import { GetSecretValueCommandInput } from "@aws-sdk/client-secrets-manager"
 
 describe("Test the lambda connector against a mock environment", () => {
@@ -13,15 +12,6 @@ describe("Test the lambda connector against a mock environment", () => {
         secretsDictionary: {} as SecretsDictionary
     }
 
-    const resetMockValues = () => {
-        mockValues.actualSecretString = null
-        mockValues.errorOnNextCall = false
-        mockValues.secretsDictionary = {}
-    }
-
-    let getDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
-    let getReplicaDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
-    let getSeparateReplicaDataHandler: (event: HandlerEvent) => Promise<HandlerResponse>
     let DB_APP_NAME: string
     let MIN_CONNECTION_IDLE_TIME_SEC: number
     let MAX_CONNECTIONS: number
@@ -42,6 +32,9 @@ describe("Test the lambda connector against a mock environment", () => {
 
     const postgresConnectorMock = jest.fn()
 
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => { }) as any)
+    const onSpyMock = jest.spyOn(process, 'on').mockImplementation((() => { }) as any)
+
     beforeAll(async () => {
         jest.mock("@aws-sdk/client-secrets-manager", () => ({
             SecretsManager: jest.fn().mockImplementation(() => ({
@@ -58,9 +51,13 @@ describe("Test the lambda connector against a mock environment", () => {
         }))
 
         jest.mock("serverless-postgres", () => postgresConnectorMock)
+    })
 
-        handlers = require("../src");
-        getDataHandler = handlers.lambdaConnector(
+    let externalEnvironment
+
+    const init = async () => {
+        handlers = require("../src")
+        const getDataHandler = () => handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 const result = await props.db!.client.query("SELECT 1 as one");
@@ -70,7 +67,18 @@ describe("Test the lambda connector against a mock environment", () => {
                 databaseConnected: true
             }
         )
-        getReplicaDataHandler = handlers.lambdaConnector(
+        const getTelegrafDataHandler = () => handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                const result = await props.db!.client.query("SELECT 1 as one");
+                return result.rows[0].one;
+            },
+            {
+                databaseConnected: true,
+                telegraf: true
+            }
+        )
+        const getReplicaDataHandler = () => handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 const result = await props.db!.client.query("SELECT 1 as one");
@@ -81,7 +89,7 @@ describe("Test the lambda connector against a mock environment", () => {
                 replicaInjection: "inject_as_main"
             }
         )
-        getSeparateReplicaDataHandler = handlers.lambdaConnector(
+        const getSeparateReplicaDataHandler = () => handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
                 const result = await props.db!.client.query("SELECT 1 as one");
@@ -95,11 +103,18 @@ describe("Test the lambda connector against a mock environment", () => {
         DB_APP_NAME = handlers.DB_APP_NAME
         MIN_CONNECTION_IDLE_TIME_SEC = handlers.MIN_CONNECTION_IDLE_TIME_SEC
         MAX_CONNECTIONS = handlers.MAX_CONNECTIONS
-    })
 
-    let externalEnvironment
+        return {
+            getDataHandler, getReplicaDataHandler, getSeparateReplicaDataHandler, getTelegrafDataHandler
+        }
+    }
+
+    const cleanMock = jest.fn()
 
     beforeEach(async () => {
+        mockExit.mockClear()
+        cleanMock.mockClear()
+        onSpyMock.mockImplementation((() => { }) as any)
         externalEnvironment = {} as any
         for (const key in process.env) externalEnvironment[key] = process.env[key]
         process.env = {}
@@ -107,7 +122,7 @@ describe("Test the lambda connector against a mock environment", () => {
         postgresConnectorMock.mockImplementation((...args: any) => {
             return {
                 connect: jest.fn(),
-                clean: jest.fn(),
+                clean: cleanMock,
                 query: jest.fn().mockResolvedValue({ rows: [{ one: 1 }] }),
                 end: jest.fn()
             }
@@ -123,7 +138,9 @@ describe("Test the lambda connector against a mock environment", () => {
         process.env.DB_NAME = "db"
         process.env.DB_SECRET_ARN = "arn"
         mockValues.actualSecretString = `{ "password": "secret" }`
-        expect(await getDataHandler({ body: "" })).toEqual({ data: "1" })
+        const { getDataHandler } = await init()
+
+        expect(await getDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).not.toHaveBeenCalledWith(
             {
                 user: "postgres",
@@ -168,7 +185,10 @@ describe("Test the lambda connector against a mock environment", () => {
         process.env.DB_NAME = "db"
         process.env.DB_SECRET_ARN = "arn"
         mockValues.actualSecretString = `{ "password": "secret" }`
-        expect(await getReplicaDataHandler({ body: "" })).toEqual({ data: "1" })
+        onSpyMock.mockRestore()
+        const { getReplicaDataHandler } = await init()
+
+        expect(await getReplicaDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).toHaveBeenCalledWith(
             {
                 user: "postgres",
@@ -205,6 +225,12 @@ describe("Test the lambda connector against a mock environment", () => {
                 maxRetries: 5,
                 capMs: 2000
             })
+
+        process.emit("SIGTERM")
+        await new Promise(r => setTimeout(r, 200))
+
+        expect(mockExit).toHaveBeenCalledWith(0)
+        expect(cleanMock).toHaveBeenCalled()
     })
 
     test("Should correctly configure the database with separate read replica", async () => {
@@ -213,7 +239,9 @@ describe("Test the lambda connector against a mock environment", () => {
         process.env.DB_NAME = "db"
         process.env.DB_SECRET_ARN = "arn"
         mockValues.actualSecretString = `{ "password": "secret" }`
-        expect(await getSeparateReplicaDataHandler({ body: "" })).toEqual({ data: "1" })
+        const { getSeparateReplicaDataHandler } = await init()
+
+        expect(await getSeparateReplicaDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).toHaveBeenCalledWith(
             {
                 user: "postgres",
@@ -257,7 +285,8 @@ describe("Test the lambda connector against a mock environment", () => {
         process.env.DB_NAME = "db"
         process.env.DB_SECRET_ARN = "arn"
         mockValues.actualSecretString = `{ "password": "secret" }`
-        expect(await getSeparateReplicaDataHandler({ body: "" })).toMatch("errorMessage")
+        const { getSeparateReplicaDataHandler } = await init()
+        await expect(getSeparateReplicaDataHandler()({ body: "" })).rejects.toThrow("Replica database not connected")
     })
 
     test("Should correctly configure the database with non-default parameters", async () => {
@@ -268,7 +297,9 @@ describe("Test the lambda connector against a mock environment", () => {
         process.env.MIN_CONNECTION_IDLE_TIME_SEC = "7"
         process.env.MAX_CONNECTIONS = "42"
         mockValues.actualSecretString = `{ "password": "secret" }`
-        expect(await getDataHandler({ body: "" })).toEqual({ data: "1" })
+        const { getDataHandler } = await init()
+
+        expect(await getDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).toHaveBeenCalledWith(
             {
                 user: "postgres",

@@ -403,8 +403,8 @@ const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) =
     fn.connectedResources = connectedResources
 }
 
-const setupProps = async (event: HandlerEvent, connectorProps: ConnectorProperties) => {
-    const handlerProps = { event } as HandlerProps
+const setupProps = async (connectorProps: ConnectorProperties) => {
+    const handlerProps = {} as HandlerProps
     if (connectorProps.databaseConnected) {
         const { client, replicaClient } = await connectPostgresDb(connectorProps)
         handlerProps.db = connectDatabase(client)
@@ -420,16 +420,6 @@ const setupProps = async (event: HandlerEvent, connectorProps: ConnectorProperti
         handlerProps.telegraf = await createTelegrafConnection()
     }
     return handlerProps
-}
-
-const teardownProps = async (handlerProps: HandlerProps, connectorProps: ConnectorProperties) => {
-    if (connectorProps.telegraf && handlerProps.telegraf) {
-        const body = JSON.parse(handlerProps.event!.body)
-        await handlerProps.telegraf.handleUpdate(body)
-    }
-    if (connectorProps.databaseConnected) {
-        await handlerProps.db?.client.clean()
-    }
 }
 
 const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: HandlerEvent, props: HandlerProps) => {
@@ -452,6 +442,11 @@ const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: H
     return true
 }
 
+type HandlerPropsHolder = {
+    propsPromise: Promise<HandlerProps>
+    props?: HandlerProps
+}
+
 export const lambdaConnector = <T extends FunctionCallDefinition>(
     definition: T & { metadata: FunctionMetadata },
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
@@ -463,16 +458,39 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         return placeholder as any
     }
 
+    const holder = {
+        propsPromise: setupProps(connectorProps)
+    } as HandlerPropsHolder
+
+    if (connectorProps.telegraf) {
+        (async () => {
+            try {
+                const props = holder.props ?? (holder.props = await holder.propsPromise)
+                callImplementation("{}", definition, implementation, props)
+            } catch (e) {
+                console.error("Error initializing Telegram connector", e)
+            }
+        })()
+    }
+
     process.on("SIGTERM", async () => {
         console.log("SIGTERM received, shutting down lambda")
+        if (connectorProps.databaseConnected) {
+            try {
+                const props = holder.props ?? (holder.props = await holder.propsPromise)
+                await props.db?.client.clean()
+            } catch (e) {
+                console.warn("Error cleaning database connection", e)
+            }
+        }
         process.exit(0)
     })
 
     const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
-        let props = {} as HandlerProps
+        const props = holder.props ?? (holder.props = await holder.propsPromise)
+        props.event = event
         try {
-            props = await setupProps(event, connectorProps)
             if (!(await isRequestAuthorized(connectorProps, event, props))) {
                 return {
                     statusCode: 401,
@@ -480,8 +498,12 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                     data: ""
                 }
             }
-            const callResult = await callImplementation(event.body, definition, implementation, props)
-            return ({ data: callResult })
+            if (connectorProps.telegraf && props.telegraf) {
+                const body = JSON.parse(props.event!.body)
+                await props.telegraf.handleUpdate(body)
+                return ({ data: "{}" })
+            }
+            return ({ data: await callImplementation(event.body, definition, implementation, props) })
         } catch (e: any) {
             if (connectorProps.errorHandler) await connectorProps.errorHandler(e, props, {
                 name: definition.metadata.name,
@@ -494,8 +516,6 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
             return JSONBig.stringify({
                 errorMessage: `Handler error: ${e.message ?? e}`
             })
-        } finally {
-            await teardownProps(props, connectorProps)
         }
     }
     fillConnectedResourcesProperties(connectorProps, fn)

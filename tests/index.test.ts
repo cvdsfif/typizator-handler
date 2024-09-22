@@ -19,6 +19,8 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         errorGenerator: { args: [stringS.notNull, stringS, stringS.optional] }
     })
 
+    jest.spyOn(process, 'on').mockImplementation((() => { }) as any)
+
     let externalEnvironment
 
     beforeEach(async () => {

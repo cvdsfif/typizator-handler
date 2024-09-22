@@ -16,6 +16,9 @@ describe("Test interfaces behaviour on a real database", () => {
         [K: string]: string
     }
 
+    jest.spyOn(process, 'exit').mockImplementation((() => { }) as any)
+    jest.spyOn(process, 'on').mockImplementation((() => { }) as any)
+
     const mockValues = {
         actualSecretString: null as any,
         errorOnNextCall: false,
@@ -94,18 +97,6 @@ describe("Test interfaces behaviour on a real database", () => {
             })),
             apps: initializedFirebaseApps
         }))
-
-        handlers = require("../../src");
-        getDataHandler = handlers.lambdaConnector(
-            dataApi.metadata.implementation.getData,
-            async (props: HandlerProps) => {
-                const result = await props.db!.client.query("SELECT 1 as one");
-                return result.rows[0].one;
-            },
-            {
-                databaseConnected: true
-            }
-        )
     })
 
     const connectStandardFbHandler = () => {
@@ -124,6 +115,22 @@ describe("Test interfaces behaviour on a real database", () => {
     afterAll(async () => await testClient.clean())
 
     let externalEnvironment
+
+    const initHandlers = async (props?: {
+        connectDatabase?: boolean
+    }) => {
+        handlers = require("../../src")
+        getDataHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                const result = await props.db!.client.query("SELECT 1 as one");
+                return result.rows[0].one;
+            },
+            {
+                databaseConnected: props?.connectDatabase !== false
+            }
+        )
+    }
 
     beforeEach(async () => {
         externalEnvironment = {} as any
@@ -153,17 +160,29 @@ describe("Test interfaces behaviour on a real database", () => {
         process.env = externalEnvironment!
     })
 
-    test("Should raise an exception if the database access is not configured", async () => {
-        (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));
-        process.env.DB_ENDPOINT_ADDRESS = "http://xxx";
-        (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));
-        process.env.DB_NAME = "db";
-        (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("access not configured"));
-        process.env.DB_SECRET_ARN = "arn";
-        (expect(await getDataHandler({ body: "" }))).toEqual(expect.stringContaining("password not available"));
+    test("Should raise an exception if the database access endpoint is not configured", async () => {
+        await initHandlers()
+        await expect(getDataHandler({ body: "" })).rejects.toThrow("access not configured")
+    })
+
+    test("Should raise an exception if the database access endpoint secret ARN is not configured", async () => {
+        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
+        process.env.DB_NAME = "db"
+        await initHandlers()
+        await expect(getDataHandler({ body: "" })).rejects.toThrow("access not configured")
+    })
+
+    test("Should raise an exception if the database access password is not configured", async () => {
+        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
+        process.env.DB_NAME = "db"
+        process.env.DB_SECRET_ARN = "arn"
+        await initHandlers()
+        await expect(getDataHandler({ body: "" })).rejects.toThrow("password not available")
     })
 
     test("Should expose database as connected resource for the database handler", async () => {
+        process.env.CDK_PHASE = "build"
+        initHandlers()
         expect((getDataHandler as any).connectedResources).toEqual(expect.arrayContaining([
             "DATABASE"
         ]))
@@ -177,6 +196,9 @@ describe("Test interfaces behaviour on a real database", () => {
         // AND some secret object is returned by the secrets manager and the certificate mock returns some value
         mockValues.actualSecretString = `{ "password": "secret" }`
         certMock.mockReturnValue("cert")
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
 
         // AND a standard handler is connected
         connectStandardFbHandler()
@@ -215,6 +237,9 @@ describe("Test interfaces behaviour on a real database", () => {
         mockValues.actualSecretString = `{ "password": "secret" }`
         certMock.mockReturnValue("cert")
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected
         connectStandardFbHandler()
 
@@ -241,6 +266,9 @@ describe("Test interfaces behaviour on a real database", () => {
         mockValues.actualSecretString = `{ "password": "secret" }`
         certMock.mockReturnValue("cert")
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected
         connectStandardFbHandler()
 
@@ -265,6 +293,9 @@ describe("Test interfaces behaviour on a real database", () => {
         // AND some secret object is returned by the secrets manager and the certificate mock returns some value
         mockValues.actualSecretString = `{ "password": "secret" }`
         certMock.mockReturnValue("cert")
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
 
         // AND the connected handler returns a list with an empty token
         connectedHandler = handlers.lambdaConnector(
@@ -306,6 +337,9 @@ describe("Test interfaces behaviour on a real database", () => {
             failureCount: 0
         }))
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND the connected handler returns a list with an empty token
         connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
@@ -338,6 +372,9 @@ describe("Test interfaces behaviour on a real database", () => {
         // AND the firebase multicast fails
         sendForMulticastMock.mockImplementation(() => Promise.reject(new Error("Rejected")))
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected
         connectStandardFbHandler()
 
@@ -359,6 +396,9 @@ describe("Test interfaces behaviour on a real database", () => {
 
         // AND there is already an initialized firebase app
         initializedFirebaseApps.push({})
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
 
         // AND a standard handler is connected
         connectStandardFbHandler()
@@ -389,6 +429,9 @@ describe("Test interfaces behaviour on a real database", () => {
         mockValues.actualSecretString = null
         certMock.mockReturnValue("cert")
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected
         connectStandardFbHandler()
 
@@ -412,6 +455,9 @@ describe("Test interfaces behaviour on a real database", () => {
         mockValues.errorOnNextCall = true
         certMock.mockReturnValue("cert")
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected
         connectStandardFbHandler()
 
@@ -433,6 +479,9 @@ describe("Test interfaces behaviour on a real database", () => {
         // AND there is no secret value in the store
         mockValues.actualSecretString = `{ "password": "secret" }`
         certMock.mockReturnValue("cert")
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
 
         // AND a standard handler is connected
         connectStandardFbHandler()
@@ -456,6 +505,9 @@ describe("Test interfaces behaviour on a real database", () => {
         mockValues.actualSecretString = `{ "password": "secret" }`
         certMock.mockReturnValue("cert")
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected
         connectStandardFbHandler()
 
@@ -478,6 +530,9 @@ describe("Test interfaces behaviour on a real database", () => {
         // AND some secret object is returned by the secrets manager and the certificate mock returns some value
         mockValues.actualSecretString = `{ "password": "secret" }`
         certMock.mockReturnValue("cert")
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
 
         // AND a standard handler is connected and configured to send Android links with the package
         connectedHandler = handlers.lambdaConnector(
@@ -541,6 +596,9 @@ describe("Test interfaces behaviour on a real database", () => {
             arn2: "val2"
         }
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected and configured to use secret values
         let secretsReceived = {} as SecretsDictionary
         connectedHandler = handlers.lambdaConnector(
@@ -568,6 +626,9 @@ describe("Test interfaces behaviour on a real database", () => {
     test("Should raise an exception if the secrets connection is required and there is no matching environment variables", async () => {
         // GIVEN there are no environment variables for secrets
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected and configured to use secret values
         connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
@@ -578,10 +639,8 @@ describe("Test interfaces behaviour on a real database", () => {
         )
 
         // WHEN calling the connected handler
-        const data = await connectedHandler({ body: "" })
-
-        // THEN an exception value is returned
-        expect(data).toEqual(expect.stringContaining("Secrets list not specified"))
+        // THEN an exception is thrown
+        await expect(connectedHandler({ body: "" })).rejects.toThrow("Secrets list not specified")
     })
 
     test("Should correctly connect a Telegraf handler from a given secret", async () => {
@@ -592,6 +651,9 @@ describe("Test interfaces behaviour on a real database", () => {
         mockValues.secretsDictionary = {
             arn1: "val1"
         }
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
 
         // AND a standard handler is connected and configured to use telegraf
         let telegrafGot = undefined as Telegraf | undefined
@@ -631,6 +693,9 @@ describe("Test interfaces behaviour on a real database", () => {
     test("Should raise an exception if the secrets connection is required and there is no matching environment variables", async () => {
         // GIVEN there are no environment variables for secrets
 
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
         // AND a standard handler is connected and configured to inject Telegraf
         connectedHandler = handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
@@ -641,32 +706,7 @@ describe("Test interfaces behaviour on a real database", () => {
         )
 
         // WHEN calling the connected handler
-        const data = await connectedHandler({ body: "{}" })
-
-        // THEN an exception value is returned
-        expect(data).toEqual(expect.stringContaining("Telegraf secret ARN not specified"))
-
-        // AND the Telegram handler is not invoked
-        expect(telegrafHandlerMock).not.toHaveBeenCalled()
-    })
-
-    test("Should correctly invoike a teardown handler", async () => {
-        // GIVEN the lambda connector set up
-        handlers.lambdaConnector(
-            dataApi.metadata.implementation.getData,
-            async () => { },
-            {
-                telegraf: true
-            }
-        )
-
-        // AND our test intercepts the process' exit call
-        const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => { }) as any);
-
-        // WHEN sending the termination signal
-        process.emit("SIGTERM")
-
-        // THEN the process exits with the code 0
-        expect(mockExit).toHaveBeenCalledWith(0);
+        // THEN an exception is thrown
+        await expect(connectedHandler({ body: "{}" })).rejects.toThrow("Telegraf secret ARN not specified")
     })
 })
