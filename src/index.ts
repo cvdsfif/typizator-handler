@@ -460,8 +460,10 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     if (connectorProps.telegraf) {
         (async () => {
             try {
+                console.log("Initializing Telegram connector")
                 const props = await propsSource()
                 callImplementation("{}", definition, implementation, props)
+                console.log("Telegram connector initialized")
             } catch (e) {
                 console.error("Error initializing Telegram connector", e)
             }
@@ -483,8 +485,10 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
 
     const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
+        console.log("Handler called")
         const props = await propsSource()
         props.event = event
+        console.log("Props", props)
         try {
             if (!(await isRequestAuthorized(connectorProps, event, props))) {
                 return {
@@ -493,9 +497,12 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                     data: ""
                 }
             }
+            console.log("Telegraf connector?", connectorProps.telegraf)
+            console.log("Telegraf in props?", props.telegraf)
             if (connectorProps.telegraf && props.telegraf) {
                 const body = JSON.parse(props.event!.body)
                 await props.telegraf.handleUpdate(body)
+                console.log("Telegraf handled")
                 return ({ data: "{}" })
             }
             return ({ data: await callImplementation(event.body, definition, implementation, props) })
