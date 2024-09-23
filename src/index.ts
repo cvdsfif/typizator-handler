@@ -436,6 +436,8 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         return placeholder as any
     }
 
+
+
     const setupProps = async () => {
         const handlerProps = {} as HandlerProps
         if (connectorProps.databaseConnected) {
@@ -451,24 +453,19 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         }
         if (connectorProps.telegraf) {
             handlerProps.telegraf = await createTelegrafConnection()
-        }
-        return handlerProps
-    }
-    let propsStore: HandlerProps | undefined = undefined
-    const propsSource = async () => propsStore ?? (propsStore = await setupProps())
-
-    if (connectorProps.telegraf) {
-        (async () => {
             try {
                 console.log("Initializing Telegram connector")
-                const props = await propsSource()
-                callImplementation("{}", definition, implementation, props)
+                callImplementation("{}", definition, implementation, handlerProps)
                 console.log("Telegram connector initialized")
             } catch (e) {
                 console.error("Error initializing Telegram connector", e)
             }
-        })()
+        }
+        return handlerProps
     }
+
+    let propsStore: HandlerProps | undefined = undefined
+    const propsSource = async () => propsStore ?? (propsStore = await setupProps())
 
     process.on("SIGTERM", async () => {
         console.log("SIGTERM received, shutting down lambda")
