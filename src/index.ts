@@ -436,33 +436,31 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         return placeholder as any
     }
 
-    const handlerPropsHolder = () => {
-        const setupProps = async () => {
-            const handlerProps = {} as HandlerProps
-            if (connectorProps.databaseConnected) {
-                const { client, replicaClient } = await connectPostgresDb(connectorProps)
-                handlerProps.db = connectDatabase(client)
-                if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
-            }
-            if (connectorProps.firebaseAdminConnected) {
-                handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
-            }
-            if (connectorProps.secretsUsed) {
-                handlerProps.secrets = await loadSecrets()
-            }
-            if (connectorProps.telegraf) {
-                handlerProps.telegraf = await createTelegrafConnection()
-            }
-            return handlerProps
+    const setupProps = async () => {
+        const handlerProps = {} as HandlerProps
+        if (connectorProps.databaseConnected) {
+            const { client, replicaClient } = await connectPostgresDb(connectorProps)
+            handlerProps.db = connectDatabase(client)
+            if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
         }
-        let props: HandlerProps | undefined = undefined
-        return async () => props ?? (props = await setupProps())
+        if (connectorProps.firebaseAdminConnected) {
+            handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
+        }
+        if (connectorProps.secretsUsed) {
+            handlerProps.secrets = await loadSecrets()
+        }
+        if (connectorProps.telegraf) {
+            handlerProps.telegraf = await createTelegrafConnection()
+        }
+        return handlerProps
     }
+    let propsStore: HandlerProps | undefined = undefined
+    const propsSource = async () => propsStore ?? (propsStore = await setupProps())
 
     if (connectorProps.telegraf) {
         (async () => {
             try {
-                const props = await handlerPropsHolder()()
+                const props = await propsSource()
                 callImplementation("{}", definition, implementation, props)
             } catch (e) {
                 console.error("Error initializing Telegram connector", e)
@@ -474,7 +472,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         console.log("SIGTERM received, shutting down lambda")
         if (connectorProps.databaseConnected) {
             try {
-                const props = await handlerPropsHolder()()
+                const props = await propsSource()
                 await props.db?.client.clean()
             } catch (e) {
                 console.warn("Error cleaning database connection", e)
@@ -485,7 +483,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
 
     const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
-        const props = await handlerPropsHolder()()
+        const props = await propsSource()
         props.event = event
         try {
             if (!(await isRequestAuthorized(connectorProps, event, props))) {
