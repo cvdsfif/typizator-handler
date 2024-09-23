@@ -403,26 +403,6 @@ const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) =
     fn.connectedResources = connectedResources
 }
 
-const setupProps = async (connectorProps: ConnectorProperties) => {
-    const handlerProps = {} as HandlerProps
-    console.log("In setup props", connectorProps)
-    if (connectorProps.databaseConnected) {
-        const { client, replicaClient } = await connectPostgresDb(connectorProps)
-        handlerProps.db = connectDatabase(client)
-        if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
-    }
-    if (connectorProps.firebaseAdminConnected) {
-        handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
-    }
-    if (connectorProps.secretsUsed) {
-        handlerProps.secrets = await loadSecrets()
-    }
-    if (connectorProps.telegraf) {
-        handlerProps.telegraf = await createTelegrafConnection()
-    }
-    return handlerProps
-}
-
 const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: HandlerEvent, props: HandlerProps) => {
     const ipVar = process.env.IP_LIST
     if (ipVar) {
@@ -443,11 +423,6 @@ const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: H
     return true
 }
 
-type HandlerPropsHolder = {
-    propsPromise: Promise<HandlerProps>
-    props?: HandlerProps
-}
-
 export const lambdaConnector = <T extends FunctionCallDefinition>(
     definition: T & { metadata: FunctionMetadata },
     implementation: (props: HandlerProps, ...args: InferArguments<T["args"]>) => Promise<InferTargetFromSchema<T["retVal"]>>,
@@ -460,16 +435,34 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         fillConnectedResourcesProperties(connectorProps, placeholder)
         return placeholder as any
     }
-    console.log("Setting up connector", definition.metadata.name, definition.metadata.path, connectorProps)
 
-    const holder = {
-        propsPromise: setupProps(connectorProps)
-    } as HandlerPropsHolder
+    const handlerPropsHolder = () => {
+        const setupProps = async () => {
+            const handlerProps = {} as HandlerProps
+            if (connectorProps.databaseConnected) {
+                const { client, replicaClient } = await connectPostgresDb(connectorProps)
+                handlerProps.db = connectDatabase(client)
+                if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
+            }
+            if (connectorProps.firebaseAdminConnected) {
+                handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
+            }
+            if (connectorProps.secretsUsed) {
+                handlerProps.secrets = await loadSecrets()
+            }
+            if (connectorProps.telegraf) {
+                handlerProps.telegraf = await createTelegrafConnection()
+            }
+            return handlerProps
+        }
+        let props: HandlerProps | undefined = undefined
+        return async () => props ?? (props = await setupProps())
+    }
 
     if (connectorProps.telegraf) {
         (async () => {
             try {
-                const props = holder.props ?? (holder.props = await holder.propsPromise)
+                const props = await handlerPropsHolder()()
                 callImplementation("{}", definition, implementation, props)
             } catch (e) {
                 console.error("Error initializing Telegram connector", e)
@@ -481,7 +474,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         console.log("SIGTERM received, shutting down lambda")
         if (connectorProps.databaseConnected) {
             try {
-                const props = holder.props ?? (holder.props = await holder.propsPromise)
+                const props = await handlerPropsHolder()()
                 await props.db?.client.clean()
             } catch (e) {
                 console.warn("Error cleaning database connection", e)
@@ -492,7 +485,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
 
     const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
-        const props = holder.props ?? (holder.props = await holder.propsPromise)
+        const props = await handlerPropsHolder()()
         props.event = event
         try {
             if (!(await isRequestAuthorized(connectorProps, event, props))) {
