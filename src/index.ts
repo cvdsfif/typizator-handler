@@ -405,6 +405,7 @@ const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) =
 
 const setupProps = async (connectorProps: ConnectorProperties) => {
     const handlerProps = {} as HandlerProps
+    console.log("In setup props", connectorProps)
     if (connectorProps.databaseConnected) {
         const { client, replicaClient } = await connectPostgresDb(connectorProps)
         handlerProps.db = connectDatabase(client)
@@ -459,6 +460,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         fillConnectedResourcesProperties(connectorProps, placeholder)
         return placeholder as any
     }
+    console.log("Setting up connector", definition.metadata.name, definition.metadata.path, connectorProps)
 
     const holder = {
         propsPromise: setupProps(connectorProps)
