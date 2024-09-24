@@ -451,16 +451,6 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         if (connectorProps.secretsUsed) {
             handlerProps.secrets = await loadSecrets()
         }
-        if (connectorProps.telegraf) {
-            handlerProps.telegraf = await createTelegrafConnection()
-            try {
-                console.log("Initializing Telegram connector")
-                callImplementation("{}", definition, implementation, handlerProps)
-                console.log("Telegram connector initialized")
-            } catch (e) {
-                console.error("Error initializing Telegram connector", e)
-            }
-        }
         return handlerProps
     }
 
@@ -482,10 +472,8 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
 
     const fn = async (event: HandlerEvent) => {
         if (event.body === PING) return { data: describeJsonFunction(definition) }
-        console.log("Handler called")
         const props = await propsSource()
         props.event = event
-        console.log("Props", props)
         try {
             if (!(await isRequestAuthorized(connectorProps, event, props))) {
                 return {
@@ -494,15 +482,15 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                     data: ""
                 }
             }
-            console.log("Telegraf connector?", connectorProps.telegraf)
-            console.log("Telegraf in props?", props.telegraf)
-            if (connectorProps.telegraf && props.telegraf) {
+
+            if (connectorProps.telegraf) props.telegraf = await createTelegrafConnection()
+            const retval = ({ data: await callImplementation(event.body, definition, implementation, props) })
+            if (props.telegraf) {
                 const body = JSON.parse(props.event!.body)
                 await props.telegraf.handleUpdate(body)
-                console.log("Telegraf handled")
                 return ({ data: "{}" })
             }
-            return ({ data: await callImplementation(event.body, definition, implementation, props) })
+            return retval
         } catch (e: any) {
             if (connectorProps.errorHandler) await connectorProps.errorHandler(e, props, {
                 name: definition.metadata.name,

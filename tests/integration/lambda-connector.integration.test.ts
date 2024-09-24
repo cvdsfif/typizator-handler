@@ -706,7 +706,9 @@ describe("Test interfaces behaviour on a real database", () => {
         )
 
         // WHEN calling the connected handler
-        // THEN an exception is thrown
-        await expect(connectedHandler({ body: "{}" })).rejects.toThrow("Telegraf secret ARN not specified")
+        const result = await connectedHandler({ body: "{}" })
+
+        // THEN an error is returned
+        expect(result).toContain("Telegraf secret ARN not specified")
     })
 })
