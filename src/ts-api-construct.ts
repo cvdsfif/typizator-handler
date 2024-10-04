@@ -746,6 +746,7 @@ const createLambdasForApi =
                         },
                         vpc,
                         database, databaseSG, lambdaSG,
+                        databaseReadReplica,
                         insightsLayer, insightsLayerPolicy
                     }
                 )
