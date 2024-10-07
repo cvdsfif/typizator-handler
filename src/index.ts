@@ -295,7 +295,9 @@ export const connectPostgresDb = async (props: ConnectorProperties) => {
         maxConnections: Number(process.env.MAX_CONNECTIONS ?? MAX_CONNECTIONS),
         connUtilization: 0.6,
         maxRetries: 5,
-        capMs: 2000
+        capMs: 2000,
+        query_timeout: 600_000_000,
+        statement_timeout: 600_000_000,
     })
     await client.connect()
     if (props.replicaInjection !== "inject_separately")

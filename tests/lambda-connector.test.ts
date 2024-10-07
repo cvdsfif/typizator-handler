@@ -150,7 +150,7 @@ describe("Test the lambda connector against a mock environment", () => {
 
         expect(await getDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).not.toHaveBeenCalledWith(
-            {
+            expect.objectContaining({
                 user: "postgres",
                 database: "db",
                 host: "http://xxx.replica",
@@ -166,9 +166,9 @@ describe("Test the lambda connector against a mock environment", () => {
                 connUtilization: 0.6,
                 maxRetries: 5,
                 capMs: 2000
-            })
+            }))
         expect(postgresConnectorMock).toHaveBeenCalledWith(
-            {
+            expect.objectContaining({
                 user: "postgres",
                 database: "db",
                 host: "http://xxx",
@@ -184,7 +184,7 @@ describe("Test the lambda connector against a mock environment", () => {
                 connUtilization: 0.6,
                 maxRetries: 5,
                 capMs: 2000
-            })
+            }))
     })
 
     test("Should correctly configure the database with read replica", async () => {
@@ -198,7 +198,7 @@ describe("Test the lambda connector against a mock environment", () => {
 
         expect(await getReplicaDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).toHaveBeenCalledWith(
-            {
+            expect.objectContaining({
                 user: "postgres",
                 database: "db",
                 host: "http://xxx.replica",
@@ -214,9 +214,9 @@ describe("Test the lambda connector against a mock environment", () => {
                 connUtilization: 0.6,
                 maxRetries: 5,
                 capMs: 2000
-            })
+            }))
         expect(postgresConnectorMock).not.toHaveBeenCalledWith(
-            {
+            expect.objectContaining({
                 user: "postgres",
                 database: "db",
                 host: "http://xxx",
@@ -232,7 +232,7 @@ describe("Test the lambda connector against a mock environment", () => {
                 connUtilization: 0.6,
                 maxRetries: 5,
                 capMs: 2000
-            })
+            }))
 
         process.emit("SIGTERM")
         await new Promise(r => setTimeout(r, 200))
@@ -251,7 +251,7 @@ describe("Test the lambda connector against a mock environment", () => {
 
         expect(await getSeparateReplicaDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).toHaveBeenCalledWith(
-            {
+            expect.objectContaining({
                 user: "postgres",
                 database: "db",
                 host: "http://xxx.replica",
@@ -267,9 +267,9 @@ describe("Test the lambda connector against a mock environment", () => {
                 connUtilization: 0.6,
                 maxRetries: 5,
                 capMs: 2000
-            })
+            }))
         expect(postgresConnectorMock).toHaveBeenCalledWith(
-            {
+            expect.objectContaining({
                 user: "postgres",
                 database: "db",
                 host: "http://xxx",
@@ -285,7 +285,7 @@ describe("Test the lambda connector against a mock environment", () => {
                 connUtilization: 0.6,
                 maxRetries: 5,
                 capMs: 2000
-            })
+            }))
     })
 
     test("Should throw an exception if a separate read replica is not configured with an address", async () => {
@@ -309,7 +309,7 @@ describe("Test the lambda connector against a mock environment", () => {
 
         expect(await getDataHandler()({ body: "" })).toEqual({ data: "1" })
         expect(postgresConnectorMock).toHaveBeenCalledWith(
-            {
+            expect.objectContaining({
                 user: "postgres",
                 database: "db",
                 host: "http://xxx",
@@ -325,6 +325,6 @@ describe("Test the lambda connector against a mock environment", () => {
                 connUtilization: 0.6,
                 maxRetries: 5,
                 capMs: 2000
-            })
+            }))
     })
 })
