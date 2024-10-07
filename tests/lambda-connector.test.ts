@@ -261,7 +261,7 @@ describe("Test the lambda connector against a mock environment", () => {
                     rejectUnauthorized: false
                 },
                 delayMs: 3000,
-                application_name: DB_APP_NAME,
+                application_name: `${DB_APP_NAME}_replica`,
                 minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
                 maxConnections: MAX_CONNECTIONS,
                 connUtilization: 0.6,

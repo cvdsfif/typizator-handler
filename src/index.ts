@@ -311,7 +311,7 @@ export const connectPostgresDb = async (props: ConnectorProperties) => {
         ssl: {
             rejectUnauthorized: false
         },
-        application_name: process.env.DB_APP_NAME ?? DB_APP_NAME,
+        application_name: process.env.DB_APP_NAME ? `${process.env.DB_APP_NAME}_replica` : `${DB_APP_NAME}_replica`,
         minConnectionIdleTimeSec: Number(process.env.MIN_CONNECTION_IDLE_TIME_SEC ?? MIN_CONNECTION_IDLE_TIME_SEC),
         maxConnections: Number(process.env.MAX_CONNECTIONS ?? MAX_CONNECTIONS),
         connUtilization: 0.6,
