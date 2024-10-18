@@ -330,11 +330,11 @@ export type HeadersContainer = {
     /**
      * Headers to send to the client    
      */
-    headers: { [key: string]: string | string[] | undefined },
+    headers?: { [key: string]: string | string[] | undefined },
     /**
      * Cookies to send to the client
      */
-    cookies?: { [key: string]: string }
+    cookies?: string[]
 }
 
 /**
@@ -419,6 +419,7 @@ const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: H
     }
     const headerToken = event.headers?.["x-security-token"]?.trim()
     const securityToken = headerToken === TOKEN_FROM_COOKIE ? event?.cookies?.SECURITY_TOKEN_COOKIE_NAME : headerToken
+    console.log(`securityToken: ${securityToken}`)
 
     const accessRights = {
         mask: intS.optional.unbox(process.env.ACCESS_MASK)
