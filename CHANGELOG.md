@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 Support for authentication by cookie added
 
+## 4.0.0-beta.18 - 2024-10-07
+
 ## 4.0.0-beta.17 - 2024-10-07
 
 ## 4.0.0-beta.16 - 2024-10-04
