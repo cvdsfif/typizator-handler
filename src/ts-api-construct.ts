@@ -191,7 +191,7 @@ export type TSApiProperties<T extends ApiDefinition> = {
          */
         customDomainLookup?: (
             scope: Construct,
-            props: TsApiGenericProperties<T>,
+            props: TsApiGenericProperties<any>,
             customPath: string) => IHostedZone
     },
     /**
