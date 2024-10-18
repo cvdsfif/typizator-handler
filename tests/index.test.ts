@@ -1,5 +1,5 @@
 import { InferTargetFromSchema, apiS, arrayS, bigintS, objectS, stringS } from "typizator";
-import { HandlerEvent, HandlerProps, PING, lambdaConnector } from "../src";
+import { HandlerEvent, HandlerProps, PING, TOKEN_FROM_COOKIE, lambdaConnector } from "../src";
 import { SpecialHeders } from "../src/handler-objects";
 
 describe("Testing the type conversion facade for AWS lambdas", () => {
@@ -133,6 +133,45 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
 
         // WHEN calling the handler
         const result = await meowHandler({ body: "Any body", headers: { "x-security-token": SECURITY_TOKEN } })
+
+        // THEN the authenticator function is called with the right parameters
+        expect(authenticator).toHaveBeenCalledWith(expect.any(Object), SECURITY_TOKEN, { mask: ACCESS_MASK })
+
+        // AND the underlying function is called
+        expect(meowFn).toHaveBeenCalled()
+
+        // AND the result of the call returns the correct value
+        expect(result).toEqual({ "data": "\"Ok\"" })
+    })
+
+    test("Should authorize the handler access by cookie if the access rights match", async () => {
+        // GIVEN the access mask set for the handler and the security token
+        const ACCESS_MASK = 0b1
+        process.env.ACCESS_MASK = `${ACCESS_MASK}`
+        const SECURITY_TOKEN = "Tiktok"
+
+        // AND the authenticator returns true
+        const authenticator = jest.fn().mockReturnValue(true)
+
+        // AND a handler is set up
+        const meowFn = jest.fn().mockReturnValue("Ok")
+        const meowHandler =
+            lambdaConnector(
+                simpleApiS.metadata.implementation.meow,
+                meowFn,
+                { databaseConnected: false, authenticator }
+            )
+
+        // WHEN calling the handler
+        const result = await meowHandler({
+            body: "Any body",
+            headers: {
+                "x-security-token": TOKEN_FROM_COOKIE
+            },
+            cookies: {
+                SECURITY_TOKEN_COOKIE_NAME: SECURITY_TOKEN
+            }
+        })
 
         // THEN the authenticator function is called with the right parameters
         expect(authenticator).toHaveBeenCalledWith(expect.any(Object), SECURITY_TOKEN, { mask: ACCESS_MASK })

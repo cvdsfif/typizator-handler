@@ -181,7 +181,11 @@ export type HandlerProps = {
     /**
      * If the handler is connected to a Telegraf bot, this is the bot facade allowing to send messages to that bot
      */
-    telegraf?: Telegraf
+    telegraf?: Telegraf,
+    /**
+     * If present, the lambda will use the provided object to send headers and cookies to the client
+     */
+    headersContainer?: HeadersContainer
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -300,25 +304,8 @@ export const connectPostgresDb = async (props: ConnectorProperties) => {
         statement_timeout: 600_000_000,
     })
     await client.connect()
-    if (props.replicaInjection !== "inject_separately")
-        return { client }
-    if (!(process.env.DB_REPLICA_ENDPOINT_ADDRESS)) throw new Error("Replica database not connected")
-    const replicaClient = new ServerlessClient({
-        user: "postgres",
-        host: process.env.DB_REPLICA_ENDPOINT_ADDRESS, database, password,
-        port: 5432,
-        delayMs: 3000,
-        ssl: {
-            rejectUnauthorized: false
-        },
-        application_name: process.env.DB_APP_NAME ? `${process.env.DB_APP_NAME}_replica` : `${DB_APP_NAME}_replica`,
-        minConnectionIdleTimeSec: Number(process.env.MIN_CONNECTION_IDLE_TIME_SEC ?? MIN_CONNECTION_IDLE_TIME_SEC),
-        maxConnections: Number(process.env.MAX_CONNECTIONS ?? MAX_CONNECTIONS),
-        connUtilization: 0.6,
-        maxRetries: 5,
-        capMs: 2000
-    })
-    return { client, replicaClient }
+    return client
+
 }
 
 /**
@@ -334,7 +321,21 @@ export type AccessRights = {
 /**
  * Type of database connections injections defined in {@link ConnectorProperties}
  */
-export type DatabaseInjectionType = "no_injection" | "inject_as_main" | "inject_separately"
+export type DatabaseInjectionType = "no_injection" | "inject_as_main"
+
+/**
+ * Type of the object containing the headers of the response to send to the client
+ */
+export type HeadersContainer = {
+    /**
+     * Headers to send to the client    
+     */
+    headers: { [key: string]: string | string[] | undefined },
+    /**
+     * Cookies to send to the client
+     */
+    cookies?: { [key: string]: string }
+}
 
 /**
  * Properties defining what and how will be injected into the lambda handler
@@ -350,8 +351,7 @@ export type ConnectorProperties = {
     databaseConnected?: boolean,
     /**
      * If the value is `inject_as_main` uses `DB_REPLICA_ENDPOINT_ADDRESS` instead of `DB_ENDPOINT_ADDRESS` to connect to the read-only replica of the main database 
-     * instead of the main read-write instance, if if is `inject_separately`, the main database connection is injected as usual and a connection
-     * to the replica is injected separately
+     * instead of the main read-write instance
      */
     replicaInjection?: DatabaseInjectionType,
     /**
@@ -405,6 +405,9 @@ const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) =
     fn.connectedResources = connectedResources
 }
 
+export const TOKEN_FROM_COOKIE = "FROM_COOKIE"
+export const SECURITY_TOKEN_COOKIE_NAME = "security_token"
+
 const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: HandlerEvent, props: HandlerProps) => {
     const ipVar = process.env.IP_LIST
     if (ipVar) {
@@ -414,7 +417,9 @@ const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: H
             return false
         }
     }
-    const securityToken = event.headers?.["x-security-token"]?.trim()
+    const headerToken = event.headers?.["x-security-token"]?.trim()
+    const securityToken = headerToken === TOKEN_FROM_COOKIE ? event?.cookies?.SECURITY_TOKEN_COOKIE_NAME : headerToken
+
     const accessRights = {
         mask: intS.optional.unbox(process.env.ACCESS_MASK)
     }
@@ -438,14 +443,11 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         return placeholder as any
     }
 
-
-
     const setupProps = async () => {
         const handlerProps = {} as HandlerProps
         if (connectorProps.databaseConnected) {
-            const { client, replicaClient } = await connectPostgresDb(connectorProps)
+            const client = await connectPostgresDb(connectorProps)
             handlerProps.db = connectDatabase(client)
-            if (replicaClient) handlerProps.replicaDb = connectDatabase(replicaClient)
         }
         if (connectorProps.firebaseAdminConnected) {
             handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
@@ -492,16 +494,22 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                 await props.telegraf.handleUpdate(body)
                 return ({ data: "{}" })
             }
+            if (props.headersContainer) {
+                return {
+                    statusCode: 200,
+                    headers: props.headersContainer.headers,
+                    cookies: props.headersContainer.cookies,
+                    data: retval.data
+                }
+            }
             return retval
         } catch (e: any) {
             if (connectorProps.errorHandler) await connectorProps.errorHandler(e, props, {
                 name: definition.metadata.name,
                 path: definition.metadata.path
             })
-            else {
-                console.error(`Error caught: ${e.message ?? e}`);
-                console.error(e.stack);
-            }
+            console.error(`Error caught: ${e.message ?? e}`);
+            console.error(e.stack);
             return JSONBig.stringify({
                 errorMessage: `Handler error: ${e.message ?? e}`
             })

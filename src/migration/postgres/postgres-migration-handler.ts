@@ -113,7 +113,7 @@ export const postgresMigrationHandler =
             if (event.RequestType === "Delete")
                 return successResponse("This is forward-only migration, delete event ignored", event.PhysicalResourceId, event)
             try {
-                const { client } = await connectPostgresDb({});
+                const client = await connectPostgresDb({});
                 try {
                     const db = connectDatabase(client);
                     let resourceId: string | null = null;

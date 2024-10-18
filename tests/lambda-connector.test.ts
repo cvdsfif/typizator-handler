@@ -20,11 +20,16 @@ describe("Test the lambda connector against a mock environment", () => {
     type DatabaseConnection = {
         client: any
     }
+    type HeadersContainer = {
+        headers: { [key: string]: string | string[] | undefined },
+        cookies?: { [key: string]: string }
+    }
     type HandlerProps = {
         db?: DatabaseConnection,
         firebaseAdmin?: any,
         secrets?: any,
-        telegraf?: any
+        telegraf?: any,
+        headersContainer?: HeadersContainer
     }
     const dataApi = apiS({
         getData: { args: [], retVal: intS }
@@ -70,7 +75,20 @@ describe("Test the lambda connector against a mock environment", () => {
         const getEmptyDataHandler = () => handlers.lambdaConnector(
             dataApi.metadata.implementation.getData,
             async (props: HandlerProps) => {
-                console.log("Empty connector invoked")
+                return ""
+            }
+        )
+        const getHeadersDataHandler = () => handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                props.headersContainer = {
+                    headers: {
+                        "x-custom-header": "custom-value"
+                    },
+                    cookies: {
+                        "custom-cookie": "cookie-value"
+                    }
+                }
                 return ""
             }
         )
@@ -85,23 +103,12 @@ describe("Test the lambda connector against a mock environment", () => {
                 replicaInjection: "inject_as_main"
             }
         )
-        const getSeparateReplicaDataHandler = () => handlers.lambdaConnector(
-            dataApi.metadata.implementation.getData,
-            async (props: HandlerProps) => {
-                const result = await props.db!.client.query("SELECT 1 as one");
-                return result.rows[0].one;
-            },
-            {
-                databaseConnected: true,
-                replicaInjection: "inject_separately"
-            }
-        )
         DB_APP_NAME = handlers.DB_APP_NAME
         MIN_CONNECTION_IDLE_TIME_SEC = handlers.MIN_CONNECTION_IDLE_TIME_SEC
         MAX_CONNECTIONS = handlers.MAX_CONNECTIONS
 
         return {
-            getDataHandler, getReplicaDataHandler, getSeparateReplicaDataHandler, getEmptyDataHandler
+            getDataHandler, getReplicaDataHandler, getEmptyDataHandler, getHeadersDataHandler
         }
     }
 
@@ -139,6 +146,25 @@ describe("Test the lambda connector against a mock environment", () => {
 
         expect(await getEmptyDataHandler()({ body: "" })).toEqual({ data: "\"\"" })
         process.env.CDK_PHASE = undefined
+    })
+
+    test("Should invoke the function placeholder and set headers", async () => {
+        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
+        process.env.DB_NAME = "db"
+        process.env.DB_SECRET_ARN = "arn"
+        mockValues.actualSecretString = `{ "password": "secret" }`
+        const { getHeadersDataHandler } = await init()
+
+        expect(await getHeadersDataHandler()({ body: "" })).toEqual({
+            data: "\"\"",
+            headers: {
+                "x-custom-header": "custom-value"
+            },
+            cookies: {
+                "custom-cookie": "cookie-value"
+            },
+            statusCode: 200
+        })
     })
 
     test("Should correctly configure the database", async () => {
@@ -239,62 +265,6 @@ describe("Test the lambda connector against a mock environment", () => {
 
         expect(mockExit).toHaveBeenCalledWith(0)
         expect(cleanMock).toHaveBeenCalled()
-    })
-
-    test("Should correctly configure the database with separate read replica", async () => {
-        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
-        process.env.DB_REPLICA_ENDPOINT_ADDRESS = "http://xxx.replica"
-        process.env.DB_NAME = "db"
-        process.env.DB_SECRET_ARN = "arn"
-        mockValues.actualSecretString = `{ "password": "secret" }`
-        const { getSeparateReplicaDataHandler } = await init()
-
-        expect(await getSeparateReplicaDataHandler()({ body: "" })).toEqual({ data: "1" })
-        expect(postgresConnectorMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                user: "postgres",
-                database: "db",
-                host: "http://xxx.replica",
-                password: "secret",
-                port: 5432,
-                ssl: {
-                    rejectUnauthorized: false
-                },
-                delayMs: 3000,
-                application_name: `${DB_APP_NAME}_replica`,
-                minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
-                maxConnections: MAX_CONNECTIONS,
-                connUtilization: 0.6,
-                maxRetries: 5,
-                capMs: 2000
-            }))
-        expect(postgresConnectorMock).toHaveBeenCalledWith(
-            expect.objectContaining({
-                user: "postgres",
-                database: "db",
-                host: "http://xxx",
-                password: "secret",
-                port: 5432,
-                ssl: {
-                    rejectUnauthorized: false
-                },
-                delayMs: 3000,
-                application_name: DB_APP_NAME,
-                minConnectionIdleTimeSec: MIN_CONNECTION_IDLE_TIME_SEC,
-                maxConnections: MAX_CONNECTIONS,
-                connUtilization: 0.6,
-                maxRetries: 5,
-                capMs: 2000
-            }))
-    })
-
-    test("Should throw an exception if a separate read replica is not configured with an address", async () => {
-        process.env.DB_ENDPOINT_ADDRESS = "http://xxx"
-        process.env.DB_NAME = "db"
-        process.env.DB_SECRET_ARN = "arn"
-        mockValues.actualSecretString = `{ "password": "secret" }`
-        const { getSeparateReplicaDataHandler } = await init()
-        await expect(getSeparateReplicaDataHandler()({ body: "" })).rejects.toThrow("Replica database not connected")
     })
 
     test("Should correctly configure the database with non-default parameters", async () => {
