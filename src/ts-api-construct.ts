@@ -1,5 +1,5 @@
 import { CustomResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
-import { CorsHttpMethod, DomainName, HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
+import { CorsHttpMethod, CorsPreflightOptions, DomainName, HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { BastionHostLinux, ISecurityGroup, InstanceClass, InstanceSize, InstanceType, Peer, Port, SecurityGroup, SubnetType, Vpc, VpcProps } from "aws-cdk-lib/aws-ec2";
 import { Architecture, Code, Function, FunctionProps, ILayerVersion, InlineCode, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
@@ -216,6 +216,10 @@ export type TSApiProperties<T extends ApiDefinition> = {
      * ARN of the Lambda Insights layer to use for all the lambdas. If omitted, no insights layer is configured
      */
     lambdaInsightsArn?: string,
+    /**
+     * Optional cors configuration for the API, if not defined, the one from the parent or the default one (* / * / * / *) is used
+     */
+    corsConfiguration?: CorsPreflightOptions
 }
 
 /**
@@ -346,7 +350,7 @@ const createHttpApi = <T extends ApiDefinition>(
 ) => {
     if (!props.apiDomainData) {
         const api = new HttpApi(scope, `ProxyCorsHttpApi-${props.apiName}-${customPath}${props.deployFor}`, {
-            corsPreflight: { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] },
+            corsPreflight: props.corsConfiguration ?? { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] },
         })
         return ({
             api,
@@ -365,7 +369,7 @@ const createHttpApi = <T extends ApiDefinition>(
         domainName, certificate
     })
     const api = new HttpApi(scope, `ProxyCorsHttpApi-${props.apiName}-${customPath}${props.deployFor}`, {
-        corsPreflight: { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] },
+        corsPreflight: props.corsConfiguration ?? { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] },
         defaultDomainMapping: {
             domainName: domain
         }
@@ -902,7 +906,8 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
             vpc: props.parentConstruct.vpc,
             sharedLayer: this.sharedLayer,
             insightsLayer: props.parentConstruct.insightsLayer,
-            insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy
+            insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy,
+            corsConfiguration: props.corsConfiguration ?? props.parentConstruct.corsConfiguration
         } as InnerDependentApiProperties<T>
         const apiInfo = createHttpApi(this, innerProps, kebabToCamel(innerProps.apiMetadata.path.replace("/", "-")))
         this.httpApi = apiInfo.api
@@ -981,6 +986,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      * Lambda insights layer policy for the layer above
      */
     readonly insightsLayerPolicy?: IManagedPolicy
+    /**
+     * Cors configuration for the API, if not defined, the one from the parent or the default one (* / * / * / *) is used
+     */
+    readonly corsConfiguration?: CorsPreflightOptions
 
     private readonly sharedLayer?: LayerVersion
 
@@ -998,6 +1007,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
         const apiInfo = createHttpApi(this, props)
         this.httpApi = apiInfo.api
         this.apiUrl = apiInfo.domainName!
+        this.corsConfiguration = props.corsConfiguration
 
         this.sharedLayer = createSharedLayerForConstruct(
             this,

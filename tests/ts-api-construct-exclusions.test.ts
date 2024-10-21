@@ -4,6 +4,7 @@ import { ApiDefinition } from "typizator";
 import { DependentApiProperties, DependentApiConstruct, ExtendedStackProps, TSApiConstruct, TSApiPlainProperties, TSApiDatabaseProperties } from "../src/ts-api-construct";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { simpleApiS } from "./lambda/shared/simple-api-definition";
+import { CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 
 describe("Testing partial exclusions on the API", () => {
     class TestStack<T extends ApiDefinition> extends Stack {
@@ -34,6 +35,7 @@ describe("Testing partial exclusions on the API", () => {
 
     let stack: Stack
     let dependentStack: Stack
+    let dependentStackWithoutCors: Stack
 
     const init = () => {
         const app = new App()
@@ -63,6 +65,7 @@ describe("Testing partial exclusions on the API", () => {
                         ENV1: "a"
                     }
                 },
+                corsConfiguration: { allowMethods: [CorsHttpMethod.POST], allowHeaders: ["*"], allowOrigins: ["https://ori.gin"] },
                 apiExclusions: [
                     simpleApiS.metadata.implementation.cruel.metadata.path,
                     simpleApiS.metadata.implementation.noMeow.metadata.path
@@ -79,7 +82,20 @@ describe("Testing partial exclusions on the API", () => {
                 description: "Dependent typescript API",
                 apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
                 lambdaPath: "tests/lambda",
-                parentConstruct: innerStack.construct
+                parentConstruct: innerStack.construct,
+                corsConfiguration: { allowMethods: [CorsHttpMethod.GET], allowHeaders: ["*"], allowOrigins: ["https://ori.gin"] },
+            }
+        )
+
+        dependentStackWithoutCors = new ConnectedStack(
+            app, "DependentStackWithoutCors", props,
+            {
+                ...props,
+                apiName: "TSDependentTestApi",
+                description: "Dependent typescript API",
+                apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
+                lambdaPath: "tests/lambda",
+                parentConstruct: innerStack.construct,
             }
         )
     }
@@ -135,7 +151,26 @@ describe("Testing partial exclusions on the API", () => {
         })
         dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Api", {
             "Name": "ProxyCorsHttpApi-TSDependentTestApi-Crueltest",
-            "CorsConfiguration": { "AllowMethods": ["*"], "AllowOrigins": ['*'], "AllowHeaders": ['*'] }
+            "CorsConfiguration": { "AllowMethods": ["GET"], "AllowOrigins": ['https://ori.gin'], "AllowHeaders": ['*'] }
+        })
+
+    })
+
+    test("Dependent stack constructs and takes resources from the main one with separate HTTP api inheriting cors", async () => {
+        init()
+        const dependentTemplate = Template.fromStack(dependentStackWithoutCors)
+        dependentTemplate.hasResourceProperties("AWS::Lambda::Function",
+            Match.objectLike({
+                "Description": Match.stringLikeRegexp("world")
+            })
+        )
+
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            "RouteKey": "POST /cruel/world"
+        })
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            "Name": "ProxyCorsHttpApi-TSDependentTestApi-Crueltest",
+            "CorsConfiguration": { "AllowMethods": ["POST"], "AllowOrigins": ['https://ori.gin'], "AllowHeaders": ['*'] }
         })
 
     })

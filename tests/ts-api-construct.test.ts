@@ -6,6 +6,7 @@ import { ApiDefinition } from "typizator";
 import { ExtendedStackProps, TSApiConstruct, TSApiPlainProperties } from "../src/ts-api-construct";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
+import { CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 
 describe("Testing the behaviour of the Typescript API construct for CDK", () => {
     class TestStack<T extends ApiDefinition> extends Stack {
@@ -253,6 +254,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     description: "Test Typescript API",
                     apiMetadata: simpleApiS.metadata,
                     lambdaPath: "tests/lambda",
+                    corsConfiguration: { allowMethods: [CorsHttpMethod.POST], allowHeaders: ["*"], allowOrigins: ["https://ori.gin"] },
                     lambdaProps: {
                         runtime: Runtime.NODEJS_18_X,
                         architecture: Architecture.ARM_64
@@ -272,7 +274,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                 }
             )
         )
-        template = Template.fromStack(stack);
+        template = Template.fromStack(stack)
         template.hasResourceProperties("AWS::Lambda::Function",
             Match.objectLike({
                 "Description": "Test Typescript API - /meow (staging)",
@@ -281,11 +283,15 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     "LogGroup": { "Ref": Match.stringLikeRegexp("Meow") }
                 }
             })
-        );
+        )
+        template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            "Name": "ProxyCorsHttpApi-TSTestApi-staging",
+            "CorsConfiguration": { "AllowMethods": ["POST"], "AllowOrigins": ['https://ori.gin'], "AllowHeaders": ['*'] }
+        })
         allLogGroups = template.findResources("AWS::Logs::LogGroup", Match.anyValue())
         helloWorldLogGroupKey = Object.keys(allLogGroups).find(key => key.includes("HelloWorld"));
         expect(allLogGroups[helloWorldLogGroupKey!].DeletionPolicy).toEqual("Retain")
-    });
+    })
 
     test("Should add a shared layer to lambdas", () => {
         template.hasResourceProperties("AWS::Lambda::Function",
