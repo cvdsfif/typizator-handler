@@ -1,7 +1,7 @@
 import { App, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { ApiDefinition } from "typizator";
-import { DependentApiProperties, DependentApiConstruct, ExtendedStackProps, TSApiConstruct, TSApiPlainProperties, TSApiDatabaseProperties } from "../src/ts-api-construct";
+import { DependentApiProperties, DependentApiConstruct, ExtendedStackProps, TSApiConstruct, TSApiPlainProperties, TSApiDatabaseProperties, customDomainLookupMock } from "../src/ts-api-construct";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { simpleApiS } from "./lambda/shared/simple-api-definition";
 import { CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
@@ -36,6 +36,9 @@ describe("Testing partial exclusions on the API", () => {
     let stack: Stack
     let dependentStack: Stack
     let dependentStackWithoutCors: Stack
+    let dependentStackWithWildcardCors: Stack
+    let dependentStackWithWildcardCorsAndWithDomain: Stack
+    let dependentStackWithDomain: Stack
 
     const init = () => {
         const app = new App()
@@ -96,6 +99,60 @@ describe("Testing partial exclusions on the API", () => {
                 apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
                 lambdaPath: "tests/lambda",
                 parentConstruct: innerStack.construct,
+            }
+        )
+
+        dependentStackWithWildcardCors = new ConnectedStack(
+            app, "DependentStackWithWildcardCors", props,
+            {
+                ...props,
+                apiName: "TSDependentTestApi",
+                description: "Dependent typescript API",
+                apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
+                lambdaPath: "tests/lambda",
+                parentConstruct: innerStack.construct,
+                corsConfiguration: "*",
+                apiDomainData: {
+                    hostedZoneName: "example.com",
+                    domainNamePrefix: "test",
+                    customDomainLookup: customDomainLookupMock
+                },
+            }
+        )
+
+        dependentStackWithWildcardCorsAndWithDomain = new ConnectedStack(
+            app, "DependentStackWithWildcardCorsAndWithDomain", props,
+            {
+                ...props,
+                apiName: "TSDependentTestApi",
+                description: "Dependent typescript API",
+                apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
+                lambdaPath: "tests/lambda",
+                parentConstruct: innerStack.construct,
+                corsConfiguration: "*",
+                apiDomainData: {
+                    hostedZoneName: "example.com",
+                    domainNamePrefix: "test",
+                    customDomainLookup: customDomainLookupMock
+                },
+            }
+        )
+
+        dependentStackWithDomain = new ConnectedStack(
+            app, "DependentStackWithDomain", props,
+            {
+                ...props,
+                apiName: "TSDependentTestApi",
+                description: "Dependent typescript API",
+                apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
+                lambdaPath: "tests/lambda",
+                parentConstruct: innerStack.construct,
+                corsConfiguration: { allowMethods: [CorsHttpMethod.POST], allowHeaders: ["*"], allowOrigins: ["https://ori.gin"] },
+                apiDomainData: {
+                    hostedZoneName: "example.com",
+                    domainNamePrefix: "test",
+                    customDomainLookup: customDomainLookupMock
+                },
             }
         )
     }
@@ -173,5 +230,59 @@ describe("Testing partial exclusions on the API", () => {
             "CorsConfiguration": { "AllowMethods": ["POST"], "AllowOrigins": ['https://ori.gin'], "AllowHeaders": ['*'] }
         })
 
+    })
+
+    test("Dependent stack constructs and takes resources from the main one with separate HTTP api wildcard cors", async () => {
+        init()
+        const dependentTemplate = Template.fromStack(dependentStackWithWildcardCors)
+        dependentTemplate.hasResourceProperties("AWS::Lambda::Function",
+            Match.objectLike({
+                "Description": Match.stringLikeRegexp("world")
+            })
+        )
+
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            "RouteKey": "POST /cruel/world"
+        })
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            "Name": "ProxyCorsHttpApi-TSDependentTestApi-Crueltest",
+            "CorsConfiguration": { "AllowMethods": ["*"], "AllowOrigins": ['*'], "AllowHeaders": ['*'] }
+        })
+    })
+
+    test("Dependent stack constructs and takes resources from the main one with separate HTTP api wildcard cors and domain", async () => {
+        init()
+        const dependentTemplate = Template.fromStack(dependentStackWithWildcardCorsAndWithDomain)
+        dependentTemplate.hasResourceProperties("AWS::Lambda::Function",
+            Match.objectLike({
+                "Description": Match.stringLikeRegexp("world")
+            })
+        )
+
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            "RouteKey": "POST /cruel/world"
+        })
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            "Name": "ProxyCorsHttpApi-TSDependentTestApi-Crueltest",
+            "CorsConfiguration": { "AllowMethods": ["*"], "AllowOrigins": ['*'], "AllowHeaders": ['*'] }
+        })
+    })
+
+    test("Dependent stack constructs and takes resources from the main one with separate HTTP api and domain", async () => {
+        init()
+        const dependentTemplate = Template.fromStack(dependentStackWithDomain)
+        dependentTemplate.hasResourceProperties("AWS::Lambda::Function",
+            Match.objectLike({
+                "Description": Match.stringLikeRegexp("world")
+            })
+        )
+
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            "RouteKey": "POST /cruel/world"
+        })
+        dependentTemplate.hasResourceProperties("AWS::ApiGatewayV2::Api", {
+            "Name": "ProxyCorsHttpApi-TSDependentTestApi-Crueltest",
+            "CorsConfiguration": { "AllowMethods": ["POST"], "AllowOrigins": ['https://ori.gin'], "AllowHeaders": ['*'] }
+        })
     })
 })

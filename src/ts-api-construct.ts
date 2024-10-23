@@ -1,4 +1,4 @@
-import { CustomResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
+import { CfnOutput, CustomResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
 import { CorsHttpMethod, CorsPreflightOptions, DomainName, HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { BastionHostLinux, ISecurityGroup, InstanceClass, InstanceSize, InstanceType, Peer, Port, SecurityGroup, SubnetType, Vpc, VpcProps } from "aws-cdk-lib/aws-ec2";
@@ -219,7 +219,7 @@ export type TSApiProperties<T extends ApiDefinition> = {
     /**
      * Optional cors configuration for the API, if not defined, the one from the parent or the default one (* / * / * / *) is used
      */
-    corsConfiguration?: CorsPreflightOptions
+    corsConfiguration?: CorsPreflightOptions | "*"
 }
 
 /**
@@ -350,7 +350,8 @@ const createHttpApi = <T extends ApiDefinition>(
 ) => {
     if (!props.apiDomainData) {
         const api = new HttpApi(scope, `ProxyCorsHttpApi-${props.apiName}-${customPath}${props.deployFor}`, {
-            corsPreflight: props.corsConfiguration ?? { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] },
+            corsPreflight: !props.corsConfiguration || props.corsConfiguration === "*" ?
+                { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] } : props.corsConfiguration,
         })
         return ({
             api,
@@ -369,7 +370,8 @@ const createHttpApi = <T extends ApiDefinition>(
         domainName, certificate
     })
     const api = new HttpApi(scope, `ProxyCorsHttpApi-${props.apiName}-${customPath}${props.deployFor}`, {
-        corsPreflight: props.corsConfiguration ?? { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] },
+        corsPreflight: !props.corsConfiguration || props.corsConfiguration === "*" ?
+            { allowMethods: [CorsHttpMethod.ANY], allowOrigins: ['*'], allowHeaders: ['*'] } : props.corsConfiguration,
         defaultDomainMapping: {
             domainName: domain
         }
@@ -989,7 +991,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
     /**
      * Cors configuration for the API, if not defined, the one from the parent or the default one (* / * / * / *) is used
      */
-    readonly corsConfiguration?: CorsPreflightOptions
+    readonly corsConfiguration?: CorsPreflightOptions | "*"
 
     private readonly sharedLayer?: LayerVersion
 

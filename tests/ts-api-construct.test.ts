@@ -51,6 +51,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         }
                     },
                     lambdaInsightsArn,
+                    corsConfiguration: "*",
                     extraBundling: {
                         minify: true,
                         sourceMap: false,
