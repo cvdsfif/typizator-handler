@@ -496,16 +496,16 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                 return ({ data: "{}" })
             }
             if (props.headersContainer) {
-                console.log("Returned headers", props.headersContainer.headers, props.headersContainer.cookies)
-                console.log("Returned data", retval.data)
+                //console.log("Returned headers", props.headersContainer.headers, props.headersContainer.cookies)
+                //console.log("Returned data", retval.data)
                 return {
                     statusCode: 200,
                     headers: props.headersContainer.headers,
                     cookies: props.headersContainer.cookies,
-                    data: retval.data
+                    body: { data: retval.data }
                 }
             }
-            console.log("Plain data", retval.data)
+            //console.log("Plain data", retval.data)
             return retval
         } catch (e: any) {
             if (connectorProps.errorHandler) await connectorProps.errorHandler(e, props, {
