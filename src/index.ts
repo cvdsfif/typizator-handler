@@ -489,31 +489,31 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
             }
 
             if (connectorProps.telegraf) props.telegraf = await createTelegrafConnection()
-            const retval = ({ data: await callImplementation(event.body, definition, implementation, props) })
+            const data = await callImplementation(event.body, definition, implementation, props)
             if (props.telegraf) {
                 const body = JSON.parse(props.event!.body)
                 await props.telegraf.handleUpdate(body)
                 return ({ data: "{}" })
             }
             if (props.headersContainer) {
-                //console.log("Returned headers", props.headersContainer.headers, props.headersContainer.cookies)
-                //console.log("Returned data", retval.data)
-                return {
+                const retval = ({
                     statusCode: 200,
                     headers: props.headersContainer.headers,
                     cookies: props.headersContainer.cookies,
-                    body: JSON.stringify({ data: retval.data })
-                }
+                    body: JSON.stringify({ data })
+                })
+                console.log("Returned data", retval)
+                return retval
             }
-            //console.log("Plain data", retval.data)
-            return retval
+            console.log("Plain data", data)
+            return ({ data })
         } catch (e: any) {
             if (connectorProps.errorHandler) await connectorProps.errorHandler(e, props, {
                 name: definition.metadata.name,
                 path: definition.metadata.path
             })
-            console.error(`Error caught: ${e.message ?? e}`);
-            console.error(e.stack);
+            console.error(`Error caught: ${e.message ?? e}`)
+            console.error(e.stack)
             return JSONBig.stringify({
                 errorMessage: `Handler error: ${e.message ?? e}`
             })

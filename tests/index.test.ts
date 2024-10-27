@@ -332,7 +332,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         // THEN the underlying function is called
         expect(meowFn).toHaveBeenCalled()
 
-        // AND the result of the call reflects the authorization error
+        // AND the result of the call returns the correct value
         expect(result).toEqual({ "data": "\"Ok\"" })
     })
 
