@@ -156,7 +156,7 @@ describe("Test the lambda connector against a mock environment", () => {
         const { getHeadersDataHandler } = await init()
 
         expect(await getHeadersDataHandler()({ body: "" })).toEqual({
-            data: "\"\"",
+            body: { data: "\"\"" },
             headers: {
                 "x-custom-header": "custom-value"
             },

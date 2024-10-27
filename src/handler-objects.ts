@@ -21,4 +21,6 @@ export type HandlerEvent = {
  */
 export type HandlerResponse = {
     data: string
-} | string
+} | string | {
+    body: { data: string }
+}
