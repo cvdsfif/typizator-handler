@@ -155,7 +155,7 @@ describe("Test the lambda connector against a mock environment", () => {
         mockValues.actualSecretString = `{ "password": "secret" }`
         const { getHeadersDataHandler } = await init()
 
-        expect(await getHeadersDataHandler()({ body: "" })).toEqual({
+        expect(await getHeadersDataHandler()(JSON.stringify({ body: "" }))).toEqual({
             body: { data: "\"\"" },
             headers: {
                 "x-custom-header": "custom-value"

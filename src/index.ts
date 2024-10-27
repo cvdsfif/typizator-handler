@@ -502,7 +502,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                     statusCode: 200,
                     headers: props.headersContainer.headers,
                     cookies: props.headersContainer.cookies,
-                    body: { data: retval.data }
+                    body: JSON.stringify({ data: retval.data })
                 }
             }
             //console.log("Plain data", retval.data)
