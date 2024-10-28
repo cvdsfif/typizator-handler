@@ -418,7 +418,13 @@ const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: H
         }
     }
     const headerToken = event.headers?.["x-security-token"]?.trim()
-    const securityToken = headerToken === TOKEN_FROM_COOKIE ? event?.cookies?.SECURITY_TOKEN_COOKIE_NAME : headerToken
+
+    let securityToken: string | undefined
+    if (headerToken === TOKEN_FROM_COOKIE) {
+        securityToken = event.cookies?.find(cookie => cookie.startsWith(SECURITY_TOKEN_COOKIE_NAME))?.split("=")[1]
+    } else {
+        securityToken = headerToken
+    }
     console.log(`securityToken: ${securityToken}`)
 
     const accessRights = {

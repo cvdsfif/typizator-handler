@@ -5,9 +5,7 @@ export type SpecialHeders = {
 
 export type HandlerEvent = {
     headers?: SpecialHeders,
-    cookies?: {
-        [key: string]: string
-    },
+    cookies?: string[],
     body: string,
     requestContext?: {
         http?: {

@@ -1,5 +1,5 @@
 import { InferTargetFromSchema, apiS, arrayS, bigintS, objectS, stringS } from "typizator";
-import { HandlerEvent, HandlerProps, PING, TOKEN_FROM_COOKIE, lambdaConnector } from "../src";
+import { HandlerEvent, HandlerProps, PING, SECURITY_TOKEN_COOKIE_NAME, TOKEN_FROM_COOKIE, lambdaConnector } from "../src";
 import { SpecialHeders } from "../src/handler-objects";
 
 describe("Testing the type conversion facade for AWS lambdas", () => {
@@ -168,9 +168,7 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
             headers: {
                 "x-security-token": TOKEN_FROM_COOKIE
             },
-            cookies: {
-                SECURITY_TOKEN_COOKIE_NAME: SECURITY_TOKEN
-            }
+            cookies: [`${SECURITY_TOKEN_COOKIE_NAME}=${SECURITY_TOKEN}`]
         })
 
         // THEN the authenticator function is called with the right parameters
