@@ -419,6 +419,8 @@ const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: H
     }
     const headerToken = event.headers?.["x-security-token"]?.trim()
 
+    console.log(`Full event`, event)
+    console.log(`Cookies got`, event.cookies)
     let securityToken: string | undefined
     if (headerToken === TOKEN_FROM_COOKIE) {
         securityToken = event.cookies?.find(cookie => cookie.startsWith(SECURITY_TOKEN_COOKIE_NAME))?.split("=")[1]
