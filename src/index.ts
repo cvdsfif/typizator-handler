@@ -417,23 +417,12 @@ const isRequestAuthorized = async (connectorProps: ConnectorProperties, event: H
             return false
         }
     }
-    const headerToken = event.headers?.["x-security-token"]?.trim()
-
-    console.log(`Full event`, event)
-    console.log(`Cookies got`, event.cookies)
-    let securityToken: string | undefined
-    if (headerToken === TOKEN_FROM_COOKIE) {
-        securityToken = event.cookies?.find(cookie => cookie.startsWith(SECURITY_TOKEN_COOKIE_NAME))?.split("=")[1]
-    } else {
-        securityToken = headerToken
-    }
-    console.log(`securityToken: ${securityToken}`)
 
     const accessRights = {
         mask: intS.optional.unbox(process.env.ACCESS_MASK)
     }
     if (connectorProps.authenticator && accessRights.mask !== undefined) {
-        if (!securityToken || !(await connectorProps.authenticator(props, securityToken, accessRights)))
+        if (!(await connectorProps.authenticator(props, "", accessRights)))
             return false
     }
     return true
@@ -510,10 +499,8 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                     cookies: props.headersContainer.cookies,
                     body: JSON.stringify({ data })
                 })
-                console.log("Returned data", retval)
                 return retval
             }
-            console.log("Plain data", data)
             return ({ data })
         } catch (e: any) {
             if (connectorProps.errorHandler) await connectorProps.errorHandler(e, props, {
