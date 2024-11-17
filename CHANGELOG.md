@@ -6,17 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-## 4.0.0-beta.28 - 2024-10-28
+Merge with cdk-typescript-lib.
 
-## 4.0.0-beta.27 - 2024-10-28
+### Added
+- Database read replica
+- Database connector lifetime extended to the end of the lambda's container execution
+- Database connection by serverless library instead of standard `pg`
+- Configurable CORS for APIs, allowing the authentication by cookies
 
-## 4.0.0-beta.26 - 2024-10-27
-
-## 4.0.0-beta.25 - 2024-10-27
-
-## 4.0.0-beta.24 - 2024-10-27
-
-## 4.0.0-beta.23 - 2024-10-23
+### Removed
+- No more specific value is passed to the `authenticator` function as security token, we let the developer implement the security token extraction from the event
 
 ## 4.0.0-beta.22 - 2024-10-21
 Configurable CORS for APIs

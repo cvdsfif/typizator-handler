@@ -1,4 +1,4 @@
-import { CfnOutput, CustomResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
+import { CustomResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
 import { CorsHttpMethod, CorsPreflightOptions, DomainName, HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import { BastionHostLinux, ISecurityGroup, InstanceClass, InstanceSize, InstanceType, Peer, Port, SecurityGroup, SubnetType, Vpc, VpcProps } from "aws-cdk-lib/aws-ec2";
@@ -575,7 +575,7 @@ const createLambda = <R extends ApiDefinition>(
         bundling: {
             minify: true,
             sourceMap: false,
-            ...(props.extraBundling ?? {}),
+            ...(props.extraBundling),
             ...specificLambdaProperties?.extraBundling
         },
         ...props.lambdaProps,

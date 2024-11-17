@@ -3,7 +3,7 @@ import { Match, Template } from "aws-cdk-lib/assertions";
 import { Construct } from "constructs";
 import { simpleApiS, simpleApiWithFirebaseS } from "./lambda/shared/simple-api-definition";
 import { ApiDefinition } from "typizator";
-import { ExtendedStackProps, TSApiConstruct, TSApiPlainProperties } from "../src/ts-api-construct";
+import { ExtendedStackProps, TSApiConstruct } from "../src/ts-api-construct";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
@@ -57,7 +57,8 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         sourceMap: false,
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                            "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "lambda-extension-service",
                         ]
                     },
                     lambdaPropertiesTree: {
@@ -269,7 +270,8 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         sourceMap: false,
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                            "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "lambda-extension-service",
                         ]
                     }
                 }

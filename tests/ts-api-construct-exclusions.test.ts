@@ -40,6 +40,12 @@ describe("Testing partial exclusions on the API", () => {
     let dependentStackWithWildcardCorsAndWithDomain: Stack
     let dependentStackWithDomain: Stack
 
+    const externalModules = [
+        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+        "serverless-postgres", "lambda-extension-service",
+    ]
+
     const init = () => {
         const app = new App()
         const props = { deployFor: "test" };
@@ -55,10 +61,7 @@ describe("Testing partial exclusions on the API", () => {
                 extraBundling: {
                     minify: true,
                     sourceMap: false,
-                    externalModules: [
-                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
-                    ]
+                    externalModules
                 },
                 dbProps: {
                     databaseName: "TestDB"
@@ -85,6 +88,11 @@ describe("Testing partial exclusions on the API", () => {
                 description: "Dependent typescript API",
                 apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
                 lambdaPath: "tests/lambda",
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
                 parentConstruct: innerStack.construct,
                 corsConfiguration: { allowMethods: [CorsHttpMethod.GET], allowHeaders: ["*"], allowOrigins: ["https://ori.gin"] },
             }
@@ -98,6 +106,11 @@ describe("Testing partial exclusions on the API", () => {
                 description: "Dependent typescript API",
                 apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
                 lambdaPath: "tests/lambda",
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
                 parentConstruct: innerStack.construct,
             }
         )
@@ -112,6 +125,11 @@ describe("Testing partial exclusions on the API", () => {
                 lambdaPath: "tests/lambda",
                 parentConstruct: innerStack.construct,
                 corsConfiguration: "*",
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
                 apiDomainData: {
                     hostedZoneName: "example.com",
                     domainNamePrefix: "test",
@@ -130,6 +148,11 @@ describe("Testing partial exclusions on the API", () => {
                 lambdaPath: "tests/lambda",
                 parentConstruct: innerStack.construct,
                 corsConfiguration: "*",
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
                 apiDomainData: {
                     hostedZoneName: "example.com",
                     domainNamePrefix: "test",
@@ -148,6 +171,11 @@ describe("Testing partial exclusions on the API", () => {
                 lambdaPath: "tests/lambda",
                 parentConstruct: innerStack.construct,
                 corsConfiguration: { allowMethods: [CorsHttpMethod.POST], allowHeaders: ["*"], allowOrigins: ["https://ori.gin"] },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
                 apiDomainData: {
                     hostedZoneName: "example.com",
                     domainNamePrefix: "test",
