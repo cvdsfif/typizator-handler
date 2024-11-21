@@ -262,9 +262,11 @@ describe("Test the lambda connector against a mock environment", () => {
 
         process.emit("SIGTERM")
         await new Promise(r => setTimeout(r, 200))
+        process.emit("SIGTERM")
+        await new Promise(r => setTimeout(r, 200))
 
         expect(mockExit).toHaveBeenCalledWith(0)
-        expect(cleanMock).toHaveBeenCalled()
+        expect(cleanMock).toHaveBeenCalledTimes(1)
     })
 
     test("Should correctly configure the database with non-default parameters", async () => {

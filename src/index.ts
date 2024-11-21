@@ -459,7 +459,11 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
     let propsStore: HandlerProps | undefined = undefined
     const propsSource = async () => propsStore ?? (propsStore = await setupProps())
 
+    let terminated = false
+
     process.on("SIGTERM", async () => {
+        if (terminated) return
+        terminated = true
         console.log("SIGTERM received, shutting down lambda")
         if (connectorProps.databaseConnected) {
             try {
