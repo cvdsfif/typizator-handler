@@ -637,7 +637,8 @@ const connectLambda =
     <R extends ApiDefinition>(
         {
             scope, props, subPath, httpApi, sharedLayer, key, keyKebabCase, specificLambdaProperties,
-            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy,
+            isHidden
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -653,7 +654,8 @@ const connectLambda =
             databaseSG?: ISecurityGroup,
             lambdaSG?: ISecurityGroup,
             insightsLayer?: ILayerVersion,
-            insightsLayerPolicy?: IManagedPolicy
+            insightsLayerPolicy?: IManagedPolicy,
+            isHidden: boolean
         }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -671,15 +673,19 @@ const connectLambda =
             insightsLayer, insightsLayerPolicy
         })
 
-        const lambdaIntegration = new HttpLambdaIntegration(
-            `Integration-${props.lambdaPath}-${keyKebabCase}-${subPath.replace("/", "-")}-${props.deployFor}`,
-            lambda
-        )
-        httpApi.addRoutes({
-            integration: lambdaIntegration,
-            methods: [HttpMethod.POST],
-            path: `${subPath}/${keyKebabCase}`
-        })
+        if (!isHidden) {
+            const lambdaIntegration = new HttpLambdaIntegration(
+                `Integration-${props.lambdaPath}-${keyKebabCase}-${subPath.replace("/", "-")}-${props.deployFor}`,
+                lambda
+            )
+            httpApi.addRoutes({
+                integration: lambdaIntegration,
+                methods: [HttpMethod.POST],
+                path: `${subPath}/${keyKebabCase}`
+            })
+        } else if (specificLambdaProperties.telegrafSecret) {
+            throw new Error(`Trying to connect telegraf to a hidden lambda in ${filePath}`)
+        }
 
         if (specificLambdaProperties.telegrafSecret && !connectedTelegramWebhooks.has(specificLambdaProperties.telegrafSecret.secretArn)) {
             createTelegrafSetupLambda(
@@ -772,7 +778,8 @@ const createLambdasForApi =
                         },
                         vpc,
                         database, databaseReadReplica, databaseSG, lambdaSG,
-                        insightsLayer, insightsLayerPolicy
+                        insightsLayer, insightsLayerPolicy,
+                        isHidden: data.hidden
                     }
                 )
         }

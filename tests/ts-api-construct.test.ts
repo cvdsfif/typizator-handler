@@ -1,7 +1,7 @@
 import { App, RemovalPolicy, Stack } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Construct } from "constructs";
-import { simpleApiS, simpleApiWithFirebaseS } from "./lambda/shared/simple-api-definition";
+import { simpleApiS, simpleApiWithFirebaseS, simpleApiWithWrongTelegrafS } from "./lambda/shared/simple-api-definition";
 import { ApiDefinition } from "typizator";
 import { ExtendedStackProps, TSApiConstruct } from "../src/ts-api-construct";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
@@ -86,7 +86,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             },
                             logGroupProps: {
                                 removalPolicy: RemovalPolicy.SNAPSHOT
-                            }
+                            },
                         },
                         cruel: {
                             authorizedIps: ["10.0.0.1"],
@@ -181,7 +181,13 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                 }
             })
         );
-    });
+    })
+
+    test.failing("There should be no route for hidden lambdas", () => {
+        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
+            "RouteKey": "POST /no-meow"
+        })
+    })
 
     test("Should integrate lambdas with an HTTP api", () => {
         template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
@@ -192,11 +198,6 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         template.hasResourceProperties("AWS::ApiGatewayV2::Integration", {
             "IntegrationUri": {
                 "Fn::GetAtt": [Match.stringLikeRegexp("Meow"), "Arn"]
-            }
-        });
-        template.hasResourceProperties("AWS::ApiGatewayV2::Integration", {
-            "IntegrationUri": {
-                "Fn::GetAtt": [Match.stringLikeRegexp("NoMeow"), "Arn"]
             }
         });
         template.hasResourceProperties("AWS::ApiGatewayV2::Integration", {
@@ -217,12 +218,89 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
             "RouteKey": "POST /meow"
         });
         template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
-            "RouteKey": "POST /no-meow"
-        });
-        template.hasResourceProperties("AWS::ApiGatewayV2::Route", {
             "RouteKey": "POST /cruel/world"
         });
-    });
+    })
+
+    test("Should fail if we try to create a hidden lambda for Telegraf connector", () => {
+        const app = new App()
+        const props = { deployFor: "staging" }
+        expect(() => new TestStack(
+            app, "TestedStack", props,
+            (stack: Stack) => {
+                const secret = new Secret(stack, "TestSecret")
+                const injectedSecret = new Secret(stack, "InjectedSecret")
+                const telegrafSecret = new Secret(stack, "TelegrafSecret")
+                return new TSApiConstruct(stack, "SimpleApi", {
+                    ...props,
+                    apiName: "TSTestApi",
+                    description: "Test Typescript API",
+                    apiMetadata: simpleApiWithWrongTelegrafS.metadata,
+                    lambdaPath: "tests/lambda",
+                    connectDatabase: false,
+                    secrets: [injectedSecret],
+                    firebaseAdminConnect: {
+                        secret,
+                        internalDatabaseName: "db"
+                    },
+                    lambdaProps: {
+                        environment: {
+                            ENV1: "a"
+                        }
+                    },
+                    lambdaInsightsArn,
+                    corsConfiguration: "*",
+                    extraBundling: {
+                        minify: true,
+                        sourceMap: false,
+                        externalModules: [
+                            "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "lambda-extension-service",
+                        ]
+                    },
+                    lambdaPropertiesTree: {
+                        telegrafInline: {
+                            telegrafSecret
+                        },
+                        telegrafConnected: {
+                            telegrafSecret
+                        },
+                        meow: {
+                            schedules: [{
+                                cron: { minute: "0/1" }
+                            }],
+                            nodejsFunctionProps: {
+                                environment: {
+                                    ENV2: "b"
+                                }
+                            }
+                        },
+                        noMeow: {
+                            authorizedIps: ["10.0.0.1"],
+                            accessMask: 0b1000,
+                            nodejsFunctionProps: {
+                                runtime: Runtime.NODEJS_18_X
+                            },
+                            logGroupProps: {
+                                removalPolicy: RemovalPolicy.SNAPSHOT
+                            },
+                        },
+                        cruel: {
+                            authorizedIps: ["10.0.0.1"],
+                            accessMask: 0b1000,
+                            world: {
+                                nodejsFunctionProps: {
+                                    runtime: Runtime.NODEJS_16_X,
+                                    architecture: Architecture.X86_64
+                                }
+                            }
+                        }
+                    }
+                })
+            }
+        )).toThrow()
+    })
 
     test("Should set the default configuration of each lambda and let the end user modify it", () => {
         template.hasResourceProperties("AWS::Lambda::Function",
