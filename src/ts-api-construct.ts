@@ -1132,6 +1132,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             if (isAuroraCluster(props)) {
                 const identifier = `DB-${props.apiName}-${props.deployFor}`
                 this.database = new DatabaseCluster(this, identifier, {
+                    defaultDatabaseName: props.dbProps.databaseName,
                     clusterIdentifier: identifier,
                     engine: DatabaseClusterEngine.auroraPostgres({
                         version: AuroraPostgresEngineVersion.VER_16_4
