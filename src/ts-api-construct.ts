@@ -5,7 +5,19 @@ import { BastionHostLinux, ISecurityGroup, InstanceClass, InstanceSize, Instance
 import { Architecture, Code, Function, FunctionProps, ILayerVersion, InlineCode, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import { BundlingOptions, NodejsFunction, NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, LogGroupProps, RetentionDays } from "aws-cdk-lib/aws-logs";
-import { AuroraCapacityUnit, AuroraPostgresEngineVersion, Credentials, DatabaseClusterEngine, DatabaseInstance, DatabaseInstanceEngine, DatabaseInstanceProps, DatabaseInstanceReadReplica, IInstanceEngine, PostgresEngineVersion, ServerlessCluster, ServerlessClusterProps } from "aws-cdk-lib/aws-rds";
+import {
+    AuroraPostgresEngineVersion,
+    ClusterInstance,
+    Credentials,
+    DatabaseCluster,
+    DatabaseClusterEngine,
+    DatabaseClusterProps,
+    DatabaseInstance,
+    DatabaseInstanceEngine,
+    DatabaseInstanceProps,
+    DatabaseInstanceReadReplica,
+    PostgresEngineVersion
+} from "aws-cdk-lib/aws-rds";
 import { Construct } from "constructs";
 import { ApiDefinition, ApiMetadata, NamedMetadata } from "typizator";
 import { ConnectedResources } from "./";
@@ -291,7 +303,7 @@ export type TSApiDatabaseProperties<T extends ApiDefinition> = TSApiProperties<T
      */
     dbProps:
     Partial<Omit<DatabaseInstanceProps, "databaseName">> & { databaseName: string } |
-    Partial<Omit<ServerlessClusterProps, "databaseName">> & { databaseName: string },
+    Partial<Omit<DatabaseClusterProps, "databaseName">> & { databaseName: string },
 }
 
 export type TsApiRdsProperties<T extends ApiDefinition> = TSApiDatabaseProperties<T> & {
@@ -331,7 +343,7 @@ export type TsApiAuroraProperties<T extends ApiDefinition> = TSApiDatabaseProper
      * - allocatedStorage: 10Gb
      * - maxAllocatedStorage: 50Gb
      */
-    dbProps: Partial<Omit<ServerlessClusterProps, "databaseName">> & { databaseName: string },
+    dbProps: Partial<Omit<DatabaseClusterProps, "databaseName">> & { databaseName: string },
 }
 
 export const isAuroraCluster = <T extends ApiDefinition>(
@@ -455,7 +467,7 @@ const addDatabaseProperties =
             props: TsApiRdsProperties<R> | TsApiAuroraProperties<R> | InnerDependentApiProperties<R>,
             lambdaProps: NodejsFunctionProps,
             vpc: Vpc,
-            database: DatabaseInstance | ServerlessCluster,
+            database: DatabaseInstance | DatabaseCluster,
             lambdaSG: ISecurityGroup,
             specificLambdaProperties?: NodejsFunctionProps,
             databaseReadReplica?: DatabaseInstanceReadReplica
@@ -472,12 +484,12 @@ const addDatabaseProperties =
                 ...lambdaProps.environment,
                 ...specificLambdaProperties?.environment,
                 DB_ENDPOINT_ADDRESS: props.auroraCluster ?
-                    (database as ServerlessCluster).clusterEndpoint.socketAddress
+                    (database as DatabaseCluster).clusterEndpoint.socketAddress
                     : (database as DatabaseInstance).dbInstanceEndpointAddress,
                 DB_NAME: props.dbProps.databaseName,
                 DB_SECRET_ARN: database!.secret?.secretFullArn,
                 DB_REPLICA_ENDPOINT_ADDRESS: props.auroraCluster ?
-                    (database as ServerlessCluster).clusterReadEndpoint.socketAddress
+                    (database as DatabaseCluster).clusterReadEndpoint.socketAddress
                     : databaseReadReplica?.dbInstanceEndpointAddress
             },
         } as NodejsFunctionProps;
@@ -488,7 +500,7 @@ const connectLambdaToDatabase =
         {
             database, databaseSG, lambda, lambdaSG, props, camelCasePath
         }: {
-            database: DatabaseInstance | ServerlessCluster,
+            database: DatabaseInstance | DatabaseCluster,
             databaseSG: ISecurityGroup,
             lambda: NodejsFunction,
             lambdaSG: ISecurityGroup,
@@ -501,7 +513,7 @@ const connectLambdaToDatabase =
         databaseSG!.addIngressRule(
             lambdaSG,
             Port.tcp(props.auroraCluster ?
-                (database as ServerlessCluster).clusterEndpoint.port :
+                (database as DatabaseCluster).clusterEndpoint.port :
                 (database as DatabaseInstance).instanceEndpoint.port),
             `Lamda2PG-${camelCasePath}-${props.deployFor}`
         )
@@ -583,7 +595,7 @@ const createLambda = <R extends ApiDefinition>(
         filePath: string,
         specificLambdaProperties?: LambdaProperties,
         vpc?: Vpc,
-        database?: DatabaseInstance | ServerlessCluster,
+        database?: DatabaseInstance | DatabaseCluster,
         databaseReadReplica?: DatabaseInstanceReadReplica,
         databaseSG?: ISecurityGroup,
         lambdaSG?: ISecurityGroup,
@@ -709,7 +721,7 @@ const connectLambda =
             keyKebabCase: string,
             specificLambdaProperties: LambdaProperties,
             vpc?: Vpc,
-            database?: DatabaseInstance | ServerlessCluster,
+            database?: DatabaseInstance | DatabaseCluster,
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
             lambdaSG?: ISecurityGroup,
@@ -789,7 +801,7 @@ const createLambdasForApi =
             sharedLayer: LayerVersion,
             lambdaPropertiesTree?: LambdaPropertiesTree<R>,
             vpc?: Vpc,
-            database?: DatabaseInstance | ServerlessCluster,
+            database?: DatabaseInstance | DatabaseCluster,
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
             lambdaSG?: ISecurityGroup,
@@ -1024,7 +1036,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
     /**
      * Database instace created by the construct
      */
-    readonly database?: DatabaseInstance | ServerlessCluster
+    readonly database?: DatabaseInstance | DatabaseCluster
     /**
      * Database read replica created by the construct
      */
@@ -1109,28 +1121,36 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             this.lambdaSG = new SecurityGroup(scope, `TSApiLambdaSG-${props.apiName}-${props.deployFor}`, { vpc })
 
             if (isAuroraCluster(props)) {
-                this.database = new ServerlessCluster(this, `DB-${props.apiName}-${props.deployFor}`, {
-                    engine: DatabaseClusterEngine.AURORA_POSTGRESQL,
+                this.database = new DatabaseCluster(this, `DB-${props.apiName}-${props.deployFor}`, {
+                    engine: DatabaseClusterEngine.auroraPostgres({
+                        version: AuroraPostgresEngineVersion.VER_16_4
+                    }),
                     vpc: this.vpc,
                     securityGroups: [this.databaseSG],
                     credentials: Credentials.fromGeneratedSecret("postgres"),
-                    scaling: {
-                        autoPause: Duration.minutes(0),
-                        minCapacity: AuroraCapacityUnit.ACU_1,
-                        maxCapacity: AuroraCapacityUnit.ACU_4,
+                    writer: ClusterInstance.serverlessV2(`DBWriter-${props.apiName}-${props.deployFor}`),
+                    readers: [ClusterInstance.serverlessV2(`DBReader-${props.apiName}-${props.deployFor}`, { scaleWithWriter: true }),],
+                    serverlessV2MinCapacity: 0.5,
+                    serverlessV2MaxCapacity: 4,
+                    backup: {
+                        retention: Duration.days(7),
+                        preferredWindow: "04:00-04:30"
                     },
+                    cloudwatchLogsRetention: RetentionDays.THREE_DAYS,
+                    iamAuthentication: false,
+                    preferredMaintenanceWindow: "Sat:23:00-Sat:23:30",
                     ...props.dbProps
                 })
             } else {
                 this.database = new DatabaseInstance(this, `DB-${props.apiName}-${props.deployFor}`, {
-                    engine: DatabaseInstanceEngine.postgres({ version: PostgresEngineVersion.VER_16 }) as any,
+                    engine: DatabaseInstanceEngine.postgres({ version: PostgresEngineVersion.VER_16 }),
                     instanceType: InstanceType.of(InstanceClass.T3, InstanceSize.MICRO),
                     vpc: this.vpc,
                     securityGroups: [this.databaseSG],
                     credentials: Credentials.fromGeneratedSecret("postgres"),
                     allocatedStorage: 10,
                     maxAllocatedStorage: 50,
-                    ...props.dbProps
+                    ...(props.dbProps as any)
                 })
                 if (props.readReplica) {
                     this.databaseReadReplica = new DatabaseInstanceReadReplica(this, `DBReplica-${props.apiName}-${props.deployFor}`, {
@@ -1138,7 +1158,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                         instanceType: InstanceType.of(InstanceClass.T3, InstanceSize.MICRO),
                         vpc: this.vpc,
                         securityGroups: [this.databaseSG],
-                        ...props.dbProps
+                        ...(props.dbProps as any)
                     })
                 }
             }
@@ -1200,7 +1220,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 this.database.connections.allowFrom(
                     this.bastion.connections,
                     props.auroraCluster ?
-                        Port.tcp((this.database as ServerlessCluster).clusterEndpoint.port) :
+                        Port.tcp((this.database as DatabaseCluster).clusterEndpoint.port) :
                         Port.tcp((this.database as DatabaseInstance).instanceEndpoint.port),
                     `${props.apiName} API Bastion connection for the RDP database`
                 )
