@@ -485,12 +485,12 @@ const addDatabaseProperties =
                 ...lambdaProps.environment,
                 ...specificLambdaProperties?.environment,
                 DB_ENDPOINT_ADDRESS: props.auroraCluster ?
-                    (database as DatabaseCluster).clusterEndpoint.socketAddress
+                    (database as DatabaseCluster).clusterEndpoint.hostname
                     : (database as DatabaseInstance).dbInstanceEndpointAddress,
                 DB_NAME: props.dbProps.databaseName,
                 DB_SECRET_ARN: database!.secret?.secretFullArn,
                 DB_REPLICA_ENDPOINT_ADDRESS: props.auroraCluster ?
-                    (database as DatabaseCluster).clusterReadEndpoint.socketAddress
+                    (database as DatabaseCluster).clusterReadEndpoint.hostname
                     : databaseReadReplica?.dbInstanceEndpointAddress
             },
         } as NodejsFunctionProps;
