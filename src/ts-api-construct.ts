@@ -16,6 +16,7 @@ import {
     DatabaseInstanceEngine,
     DatabaseInstanceProps,
     DatabaseInstanceReadReplica,
+    //DatabaseProxy,
     PostgresEngineVersion
 } from "aws-cdk-lib/aws-rds";
 import { Construct } from "constructs";
@@ -1042,6 +1043,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      */
     readonly databaseReadReplica?: DatabaseInstanceReadReplica
     /**
+     * Proxy for Aurora cluster
+     */
+    //readonly databaseProxy?: DatabaseProxy
+    /**
      * Security group attached to the database instance created by the construct
      */
     readonly databaseSG?: SecurityGroup
@@ -1121,11 +1126,14 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             this.lambdaSG = new SecurityGroup(scope, `TSApiLambdaSG-${props.apiName}-${props.deployFor}`, { vpc })
 
             if (isAuroraCluster(props)) {
-                this.database = new DatabaseCluster(this, `DB-${props.apiName}-${props.deployFor}`, {
+                const identifier = `DB-${props.apiName}-${props.deployFor}`
+                this.database = new DatabaseCluster(this, identifier, {
+                    clusterIdentifier: identifier,
                     engine: DatabaseClusterEngine.auroraPostgres({
                         version: AuroraPostgresEngineVersion.VER_16_4
                     }),
                     vpc: this.vpc,
+                    enableDataApi: true,
                     securityGroups: [this.databaseSG],
                     credentials: Credentials.fromGeneratedSecret("postgres"),
                     writer: ClusterInstance.serverlessV2(`DBWriter-${props.apiName}-${props.deployFor}`),
@@ -1141,6 +1149,11 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     preferredMaintenanceWindow: "Sat:23:00-Sat:23:30",
                     ...props.dbProps
                 })
+                /*this.databaseProxy = this.database.addProxy(`DBProxy-${props.apiName}-${props.deployFor}`, {
+                    vpc: this.vpc,
+                    securityGroups: [this.databaseSG],
+                    secrets: [this.database.secret!],
+                })*/
             } else {
                 this.database = new DatabaseInstance(this, `DB-${props.apiName}-${props.deployFor}`, {
                     engine: DatabaseInstanceEngine.postgres({ version: PostgresEngineVersion.VER_16 }),
@@ -1162,7 +1175,6 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     })
                 }
             }
-
 
             this.databaseName = props.dbProps.databaseName
 
