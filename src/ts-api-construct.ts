@@ -499,18 +499,21 @@ const addDatabaseProperties =
 const connectLambdaToDatabase =
     <R extends ApiDefinition>(
         {
-            database, databaseSG, lambda, lambdaSG, props, camelCasePath
+            database, databaseSG, lambda, lambdaSG, props, camelCasePath, auroraCluster
         }: {
             database: DatabaseInstance | DatabaseCluster,
             databaseSG: ISecurityGroup,
             lambda: NodejsFunction,
             lambdaSG: ISecurityGroup,
             props: TSApiDatabaseProperties<R>,
-            camelCasePath: string
+            camelCasePath: string,
+            auroraCluster?: boolean
         }
 
     ) => {
-        database.secret?.grantRead(lambda);
+        database.secret?.grantRead(lambda)
+        if (auroraCluster)
+            database.grantConnect(lambda, "postgres")
         databaseSG!.addIngressRule(
             lambdaSG,
             Port.tcp(props.auroraCluster ?
@@ -689,7 +692,8 @@ const createLambda = <R extends ApiDefinition>(
     if (props.connectDatabase)
         connectLambdaToDatabase({
             database: database!, databaseSG: databaseSG!, lambda,
-            lambdaSG: lambdaProperties.securityGroups![0], props, camelCasePath
+            lambdaSG: lambdaProperties.securityGroups![0], props, camelCasePath,
+            auroraCluster: props.auroraCluster
         })
 
     if (specificLambdaProperties?.schedules) {
