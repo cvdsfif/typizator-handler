@@ -1110,10 +1110,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
 
             if (isAuroraCluster(props)) {
                 this.database = new ServerlessCluster(this, `DB-${props.apiName}-${props.deployFor}`, {
-                    engine: DatabaseClusterEngine.auroraPostgres({
-                        version: AuroraPostgresEngineVersion.VER_16_4,
-
-                    }),
+                    engine: DatabaseClusterEngine.AURORA_POSTGRESQL,
                     vpc: this.vpc,
                     securityGroups: [this.databaseSG],
                     credentials: Credentials.fromGeneratedSecret("postgres"),
