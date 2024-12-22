@@ -16,7 +16,6 @@ import {
     DatabaseInstanceEngine,
     DatabaseInstanceProps,
     DatabaseInstanceReadReplica,
-    //DatabaseProxy,
     PostgresEngineVersion
 } from "aws-cdk-lib/aws-rds";
 import { Construct } from "constructs";
@@ -1154,11 +1153,6 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     preferredMaintenanceWindow: "Sat:23:00-Sat:23:30",
                     ...props.dbProps
                 })
-                /*this.databaseProxy = this.database.addProxy(`DBProxy-${props.apiName}-${props.deployFor}`, {
-                    vpc: this.vpc,
-                    securityGroups: [this.databaseSG],
-                    secrets: [this.database.secret!],
-                })*/
             } else {
                 this.database = new DatabaseInstance(this, `DB-${props.apiName}-${props.deployFor}`, {
                     engine: DatabaseInstanceEngine.postgres({ version: PostgresEngineVersion.VER_16 }),

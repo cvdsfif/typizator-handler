@@ -320,4 +320,43 @@ describe("Testing a stack with connected database", () => {
             })
         )
     })
-});
+
+    test("Should create a stack with Bastion access on Aurora cluster", () => {
+        const app = new App();
+
+        const stack = new TestStack(
+            app, "TestedStack", props,
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: connectedApi.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: true,
+                dbProps: {
+                    databaseName: "TestDatabase"
+                },
+                auroraCluster: true,
+                bastion: {
+                    openTo: ["8.8.8.8/32"]
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                    ]
+                }
+            }
+        );
+        const template = Template.fromStack(stack)
+
+        template.hasResourceProperties("AWS::EC2::Instance",
+            Match.objectLike({
+                "IamInstanceProfile": { "Ref": Match.stringLikeRegexp("SimpleApiBastionHost") },
+                "InstanceType": "t3.nano"
+            })
+        )
+    })
+})

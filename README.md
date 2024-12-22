@@ -391,6 +391,8 @@ lambdaConnector(
 )
 ```
 
+If you want your databse to be created as an Aurora cluster instead of RDS instance, you have to set the `auroraCluster` property to `true` in the construct's props.
+
 #### CORS configuration
 
 When you expose an API, you can limit the access to it by adding the CORS configuration to the stack. The simplest (default) configuration allows all origins with credentials. To explicitly set it, you simply add `corsConfiguration: "*"` to the construct's props. Alternatively, you can set it to specific origins, methods, etc.:
