@@ -5,20 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-
-## 4.2.0-beta.6 - 2024-12-21
-
-## 4.2.0-beta.5 - 2024-12-21
-
-## 4.2.0-beta.4 - 2024-12-21
-
-## 4.2.0-beta.3 - 2024-12-21
-
-## 4.2.0-beta.2 - 2024-12-21
-
-## 4.2.0-beta.1 - 2024-12-21
-
-## 4.2.0-beta.0 - 2024-12-20
+Aurora cluster support added
 
 ## 4.1.1 - 2024-12-14
 Minor typizator update
