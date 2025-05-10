@@ -40,7 +40,7 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -64,7 +64,7 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -88,7 +88,7 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -114,7 +114,7 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -140,7 +140,7 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -166,7 +166,7 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -190,7 +190,7 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }

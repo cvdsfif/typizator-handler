@@ -124,11 +124,7 @@ export type LambdaPropertiesTree<T extends ApiDefinition> = {
 /**
  * Properties defining how the stack is constructed from the `typizator` API definition
  */
-export type TSApiProperties<T extends ApiDefinition> = {
-    /**
-     * Destination environment, i.e. production, staging, dev etc...
-     */
-    deployFor: string,
+export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
     /**
      * API name (unique for your AWS account)
      */
@@ -663,7 +659,8 @@ const createLambda = <R extends ApiDefinition>(
             FB_SECRET_ARN: connectFirebase ? props.firebaseAdminConnect?.secret.secretArn : undefined,
             FB_DATABASE_NAME: connectFirebase ? props.firebaseAdminConnect?.internalDatabaseName : undefined,
             SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
-            TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn
+            TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
+            REGION: props.env?.region,
         }
     } as NodejsFunctionProps;
 

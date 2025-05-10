@@ -5,10 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-
-## 4.2.4 - 2024-12-24
-
-## 4.2.3 - 2024-12-24
+SES client injection
 
 ## 4.2.2 - 2024-12-24
 Recursive types support added

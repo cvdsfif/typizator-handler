@@ -55,7 +55,7 @@ describe("Testing a stack with connected database", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 },
                 dbProps: {
@@ -118,7 +118,7 @@ describe("Testing a stack with connected database", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -151,7 +151,7 @@ describe("Testing a stack with connected database", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -178,7 +178,7 @@ describe("Testing a stack with connected database", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -245,7 +245,7 @@ describe("Testing a stack with connected database", () => {
                         sourceMap: false,
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                            "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                            "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                         ]
                     }
                 }
@@ -275,7 +275,7 @@ describe("Testing a stack with connected database", () => {
                         sourceMap: false,
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                            "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                            "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                         ]
                     }
                 }
@@ -283,7 +283,7 @@ describe("Testing a stack with connected database", () => {
         ).rejects.toContainAllStrings("No appropriate migration handler")
     })
 
-    test("Should create a stack with Bastion access", () => {
+    test("Should create a stack with Bastion", () => {
         const app = new App();
 
         const stack = new TestStack(
@@ -306,7 +306,8 @@ describe("Testing a stack with connected database", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "@aws-sdk/client-ses",
                     ]
                 }
             }
@@ -345,7 +346,7 @@ describe("Testing a stack with connected database", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon"
+                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
                     ]
                 }
             }

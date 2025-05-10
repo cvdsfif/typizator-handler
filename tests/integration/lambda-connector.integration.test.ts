@@ -47,7 +47,8 @@ describe("Test interfaces behaviour on a real database", () => {
         db?: DatabaseConnection,
         firebaseAdmin?: FirebaseAdminConnection,
         secrets?: SecretsDictionary,
-        telegraf?: Telegraf
+        telegraf?: Telegraf,
+        sesClient?: any
     }
     const dataApi = apiS({
         getData: { args: [], retVal: intS }
@@ -64,6 +65,8 @@ describe("Test interfaces behaviour on a real database", () => {
     } as Telegraf
     const telegrafMock = jest.fn().mockImplementation((_: string) => telegrafStub)
 
+    const sesClientMock = jest.fn()
+
     beforeAll(async () => {
         jest.mock("@aws-sdk/client-secrets-manager", () => ({
             SecretsManager: jest.fn().mockImplementation(() => ({
@@ -79,13 +82,18 @@ describe("Test interfaces behaviour on a real database", () => {
             }))
         }))
 
+        jest.mock("@aws-sdk/client-ses", () => ({
+            SESClient: jest.fn().mockImplementation((...args) => {
+                return sesClientMock(...args)
+            })
+        }))
+
         jest.mock("telegraf", () => ({
             Telegraf: telegrafMock
         }))
 
         const container = await new PostgreSqlContainer().withReuse().start()
         testClient = new ServerlessClient({ connectionString: container.getConnectionUri() })
-
 
         jest.mock("firebase-admin", () => ({
             initializeApp: initializeAppMock,
@@ -710,5 +718,34 @@ describe("Test interfaces behaviour on a real database", () => {
 
         // THEN an error is returned
         expect(result).toContain("Telegraf secret ARN not specified")
+    })
+
+    test("Should correctly configure a SES client for a lambda", async () => {
+        // GIVEN the environment contains the region information
+        process.env.REGION = "dummy-region"
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false })
+
+        // AND a standard handler is connected and configured to use SES client
+        let sesClientReceived = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                sesClientReceived = props.sesClient
+            },
+            {
+                sesClient: true
+            }
+        )
+
+        // WHEN calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // THEN the SES client is correctly configured
+        expect(sesClientMock).toHaveBeenCalledWith({ region: "dummy-region" })
+
+        // AND the SES client exists for the lambda's properties
+        expect(sesClientReceived).toBeDefined()
     })
 })

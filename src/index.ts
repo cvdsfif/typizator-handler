@@ -7,6 +7,7 @@ import * as admin from 'firebase-admin'
 import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
 import { Telegraf } from "telegraf"
 import ServerlessClient from "serverless-postgres";
+import { SESClient } from "@aws-sdk/client-ses";
 
 export const PING = "@@ping";
 
@@ -185,7 +186,11 @@ export type HandlerProps = {
     /**
      * If present, the lambda will use the provided object to send headers and cookies to the client
      */
-    headersContainer?: HeadersContainer
+    headersContainer?: HeadersContainer,
+    /**
+     * If present, region-dependent SES mail sending client
+     */
+    sesClient?: SESClient,
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -385,7 +390,11 @@ export type ConnectorProperties = {
      * If `true`, the underlying lambda receives in props parameter an interface allowing to send metrics to a telegraf instance.
      * The `TELEGRAF_SECRET_ARN` environment variable contains the arn of the AWS Secret containing the telegraf channel token.
      */
-    telegraf?: boolean
+    telegraf?: boolean,
+    /**
+     * If `true`, a region-dependent SES mail sending client is created and injected to the lambda
+     */
+    sesClient?: boolean,
 }
 
 const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) => {
@@ -452,6 +461,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         }
         if (connectorProps.secretsUsed) {
             handlerProps.secrets = await loadSecrets()
+        }
+        if (connectorProps.sesClient) {
+            handlerProps.sesClient = new SESClient({ region: process.env.REGION })
         }
         return handlerProps
     }

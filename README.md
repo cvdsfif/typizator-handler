@@ -763,6 +763,9 @@ secrets: [secret1, secret2] // CDK constructs refering to the secrets
 
 In your handler, `HandlerProps` will contain a field with the contents of the listed secrets in the same order as above.
 
+### SES client injection
+
+If you want to use AWS mail sending capacities in your lambdas, you can make the container pre-inject the client to the `sesClient` property of `HandlerProps`. To do it, it's enough to set to `true` the `sesClient` prop for the `lambdaConnector` used to connect the lambda function. Note that the client will automatically be connected to the main AWS region of the stack.
 
 ## Tests
 

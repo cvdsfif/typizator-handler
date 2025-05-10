@@ -43,7 +43,7 @@ describe("Testing partial exclusions on the API", () => {
     const externalModules = [
         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
         "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-        "serverless-postgres", "lambda-extension-service",
+        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses",
     ]
 
     const init = () => {
