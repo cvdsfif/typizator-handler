@@ -29,7 +29,7 @@ import { ARecord, HostedZone, IHostedZone, RecordTarget } from "aws-cdk-lib/aws-
 import { Certificate, CertificateValidation } from "aws-cdk-lib/aws-certificatemanager";
 import { ApiGatewayv2DomainProperties } from "aws-cdk-lib/aws-route53-targets";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
-import { IManagedPolicy, ManagedPolicy } from "aws-cdk-lib/aws-iam";
+import { Effect, IManagedPolicy, ManagedPolicy, PolicyStatement } from "aws-cdk-lib/aws-iam";
 
 const connectedTelegramWebhooks = new Set<string>()
 
@@ -680,6 +680,12 @@ const createLambda = <R extends ApiDefinition>(
     )
     if (insightsLayerPolicy)
         lambda.role?.addManagedPolicy(insightsLayerPolicy)
+
+    lambda.addToRolePolicy(new PolicyStatement({
+        actions: ["ses:sendEmail", "ses:sendRawEmail"],
+        resources: ["*"],
+        effect: Effect.ALLOW
+    }))
 
     if (connectFirebase) props.firebaseAdminConnect?.secret.grantRead(lambda)
     if (connectedSecrets) props.secrets?.forEach(secret => secret.grantRead(lambda))
