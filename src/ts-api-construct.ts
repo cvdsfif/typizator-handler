@@ -29,7 +29,8 @@ import { ARecord, HostedZone, IHostedZone, RecordTarget } from "aws-cdk-lib/aws-
 import { Certificate, CertificateValidation } from "aws-cdk-lib/aws-certificatemanager";
 import { ApiGatewayv2DomainProperties } from "aws-cdk-lib/aws-route53-targets";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
-import { Effect, IManagedPolicy, ManagedPolicy, PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { AnyPrincipal, CfnAccessKey, Effect, IManagedPolicy, ManagedPolicy, PolicyStatement, User } from "aws-cdk-lib/aws-iam";
+import { BlockPublicAccess, Bucket, HttpMethods } from "aws-cdk-lib/aws-s3";
 
 const connectedTelegramWebhooks = new Set<string>()
 
@@ -120,6 +121,22 @@ export type LambdaPropertiesTree<T extends ApiDefinition> = {
     LambdaPropertiesTree<T[K]> :
     LambdaProperties
 } & AccessProperties
+
+const S3_MAX_AGE = 30_000
+
+/**
+ * Properties of an S3 bucket created on the stack
+ */
+export type S3BucketProperties = {
+    /**
+     * Name of the bucket used as the key for the bucket
+     */
+    bucketName: string,
+    /**
+     * If true, anonymous users can access the bucket
+     */
+    publicAccess?: boolean
+}
 
 /**
  * Properties defining how the stack is constructed from the `typizator` API definition
@@ -227,7 +244,11 @@ export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
     /**
      * Optional cors configuration for the API, if not defined, the one from the parent or the default one (* / * / * / *) is used
      */
-    corsConfiguration?: CorsPreflightOptions | "*"
+    corsConfiguration?: CorsPreflightOptions | "*",
+    /**
+     * Optional map of S3 buckets to create on the stack
+     */
+    s3Buckets?: S3BucketProperties[],
 }
 
 /**
@@ -394,7 +415,7 @@ export const DEFAULT_ARCHITECTURE = Architecture.ARM_64
 /**
  * Default NodeJS runtime for the lambdas created
  */
-export const DEFAULT_RUNTIME = Runtime.NODEJS_20_X;
+export const DEFAULT_RUNTIME = Runtime.NODEJS_22_X;
 
 const lookupHostedZone = <T extends ApiDefinition>(
     scope: Construct,
@@ -630,6 +651,68 @@ const createLambda = <R extends ApiDefinition>(
         ...specificLambdaProperties?.logGroupProps
     })
 
+    const bucketsSecrets: Record<string, string> = {}
+
+    props.s3Buckets?.map(bucketProps => {
+        const bucketName = bucketProps.bucketName
+
+        const bucket = new Bucket(scope, `${camelCasePath}-${bucketName}`, {
+            bucketName,
+            publicReadAccess: false,
+            removalPolicy: RemovalPolicy.RETAIN,
+            blockPublicAccess: BlockPublicAccess.BLOCK_ACLS_ONLY,
+            cors: [
+                {
+                    allowedOrigins: ['*'],
+                    allowedMethods: [HttpMethods.GET, HttpMethods.HEAD, HttpMethods.POST, HttpMethods.PUT, HttpMethods.DELETE],
+                    allowedHeaders: ['*'],
+                    maxAge: S3_MAX_AGE,
+                },
+            ],
+        })
+
+        if (bucketProps.publicAccess) {
+            bucket.addToResourcePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ['s3:GetObject'],
+                    resources: [`${bucket.bucketArn}/*`],
+                    principals: [new AnyPrincipal()], // Allow public access
+                })
+            )
+        }
+
+        const bucketUser = new User(scope, `${camelCasePath}-${bucketName}-bucket-user`, {
+            userName: `${camelCasePath}-${bucketName}-bucket-user`,
+        })
+
+        bucket.addToResourcePolicy(
+            new PolicyStatement({
+                effect: Effect.ALLOW,
+                actions: ['s3:PutObject', 's3:DeleteObject', 's3:GetObject'],
+                resources: [`${bucket.bucketArn}/*`],
+                principals: [bucketUser],
+            })
+        )
+
+        const accessKey = new CfnAccessKey(scope, `${camelCasePath}-${bucketName}-bucket-user-access-key`, {
+            userName: bucketUser.userName,
+        })
+
+        const bucketUserSecret = new Secret(scope, `${camelCasePath}-${bucketName}-bucket-user-secret`, {
+            secretName: `${props.deployFor}-bucket-user-secret`,
+            generateSecretString: {
+                secretStringTemplate: JSON.stringify({
+                    accessKeyId: accessKey.ref,
+                    secretAccessKey: accessKey.attrSecretAccessKey,
+                }),
+                generateStringKey: 'anyKey'
+            },
+        })
+
+        bucketsSecrets[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`] = bucketUserSecret.secretArn
+    })
+
     let lambdaProperties = {
         entry: `${filePath}.ts`,
         handler: key as string,
@@ -661,6 +744,7 @@ const createLambda = <R extends ApiDefinition>(
             SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
             TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
             REGION: props.env?.region,
+            ...bucketsSecrets,
         }
     } as NodejsFunctionProps;
 

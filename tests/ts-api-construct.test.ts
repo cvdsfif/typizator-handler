@@ -50,6 +50,10 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             ENV1: "a"
                         }
                     },
+                    s3Buckets: [
+                        { bucketName: "test-bucket" },
+                        { bucketName: "test-public", publicAccess: true },
+                    ],
                     lambdaInsightsArn,
                     corsConfiguration: "*",
                     extraBundling: {
@@ -93,7 +97,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             accessMask: 0b1000,
                             world: {
                                 nodejsFunctionProps: {
-                                    runtime: Runtime.NODEJS_16_X,
+                                    runtime: Runtime.NODEJS_20_X,
                                     architecture: Architecture.X86_64
                                 }
                             }
@@ -103,7 +107,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
             }
         )
         template = Template.fromStack(stack);
-    });
+    })
 
     test("Should create lambdas matching the API structure", () => {
         template.hasResourceProperties("AWS::Lambda::Function",
@@ -180,7 +184,14 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     }
                 }
             })
-        );
+        )
+
+        template.hasResourceProperties("AWS::S3::Bucket", {
+            BucketName: "test-bucket"
+        })
+        template.hasResourceProperties("AWS::S3::Bucket", {
+            BucketName: "test-public",
+        })
     })
 
     test.failing("There should be no route for hidden lambdas", () => {
@@ -291,7 +302,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             accessMask: 0b1000,
                             world: {
                                 nodejsFunctionProps: {
-                                    runtime: Runtime.NODEJS_16_X,
+                                    runtime: Runtime.NODEJS_20_X,
                                     architecture: Architecture.X86_64
                                 }
                             }
@@ -308,7 +319,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                 "Description": "Test Typescript API - /meow (test)",
                 "Architectures": ["arm64"],
                 "MemorySize": 256,
-                "Runtime": "nodejs20.x",
+                "Runtime": "nodejs22.x",
                 "Timeout": 60,
                 "LoggingConfig": {
                     "LogGroup": { "Ref": Match.stringLikeRegexp("Meow") }
@@ -349,7 +360,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                             "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses",
+                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                         ]
                     }
                 }
@@ -391,7 +402,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         );
         template.hasResourceProperties("AWS::Lambda::LayerVersion",
             Match.objectLike({
-                "CompatibleRuntimes": Match.arrayWith(["nodejs20.x", "nodejs18.x", "nodejs16.x"])
+                "CompatibleRuntimes": Match.arrayWith(["nodejs22.x", "nodejs18.x", "nodejs20.x"])
             })
         );
     });

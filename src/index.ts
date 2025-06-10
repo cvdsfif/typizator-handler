@@ -8,6 +8,7 @@ import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
 import { Telegraf } from "telegraf"
 import ServerlessClient from "serverless-postgres";
 import { SESClient } from "@aws-sdk/client-ses";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 export const PING = "@@ping";
 
@@ -155,6 +156,26 @@ export type SecretValue = {
     CreatedDate?: Date
 }
 
+const bucketAccessor = (s3Client: S3Client, bucketName: string) => {
+    return ({
+        getStringContents: async (key: string) => {
+            try {
+                const command = new GetObjectCommand({
+                    Bucket: bucketName,
+                    Key: key
+                })
+                const response = await s3Client.send(command)
+                return [null, response.Body?.transformToString()]
+            } catch (e: any) {
+                console.error(`Error during file download from S3: ${e.message}`)
+                return [e.message, null]
+            }
+        }
+    })
+}
+
+export type BucketAccess = ReturnType<typeof bucketAccessor>
+
 /**
  * Properties passed to a connected AWS lambda handler
  */
@@ -191,6 +212,10 @@ export type HandlerProps = {
      * If present, region-dependent SES mail sending client
      */
     sesClient?: SESClient,
+    /**
+     * If present, a dictionary of BucketAccess objects giving access to the S3 buckets
+     */
+    buckets?: Record<string, BucketAccess>
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -395,6 +420,10 @@ export type ConnectorProperties = {
      * If `true`, a region-dependent SES mail sending client is created and injected to the lambda
      */
     sesClient?: boolean,
+    /**
+     * List of S3 bucket names that the lambda can access. If present, a dictionary of BucketAccess objects in injected to the lambda's properties
+     */
+    buckets?: string[],
 }
 
 const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) => {
@@ -464,6 +493,13 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         }
         if (connectorProps.sesClient) {
             handlerProps.sesClient = new SESClient({ region: process.env.REGION })
+        }
+        if (connectorProps.buckets) {
+            const s3Client = new S3Client({ region: process.env.REGION })
+            handlerProps.buckets = connectorProps.buckets.reduce((acc, bucketName) => ({
+                ...acc,
+                [bucketName]: bucketAccessor(s3Client, bucketName)
+            }), {} as Record<string, BucketAccess>)
         }
         return handlerProps
     }
