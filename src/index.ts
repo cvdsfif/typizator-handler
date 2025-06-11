@@ -421,7 +421,8 @@ export type ConnectorProperties = {
      */
     sesClient?: boolean,
     /**
-     * List of S3 bucket names that the lambda can access. If present, a dictionary of BucketAccess objects in injected to the lambda's properties
+     * List of S3 bucket names that the lambda can access. If present, the lambda environment variables contain:
+     * - `BUCKET_{bucketName.toUpperCase()}_SECRET_ARN` is the arn of the secret containing the access key id and secret access key of the user created for the bucket
      */
     buckets?: string[],
 }
@@ -492,14 +493,37 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
             handlerProps.secrets = await loadSecrets()
         }
         if (connectorProps.sesClient) {
-            handlerProps.sesClient = new SESClient({ region: process.env.REGION })
+            handlerProps.sesClient = new SESClient({
+                region: process.env.REGION,
+            })
         }
         if (connectorProps.buckets) {
-            const s3Client = new S3Client({ region: process.env.REGION })
-            handlerProps.buckets = connectorProps.buckets.reduce((acc, bucketName) => ({
-                ...acc,
-                [bucketName]: bucketAccessor(s3Client, bucketName)
-            }), {} as Record<string, BucketAccess>)
+            handlerProps.buckets = {}
+            for (const bucketName of connectorProps.buckets) {
+                const secretArn = process.env[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`]
+                if (!secretArn) {
+                    throw new Error(`Bucket ${bucketName} not configured`)
+                }
+                const secretString =
+                    (await new SecretsManager()
+                        .getSecretValue({ SecretId: secretArn }))
+                        .SecretString
+                if (!secretString) {
+                    throw new Error(`Secret ${secretArn} not found`)
+                }
+
+                const secret = JSON.parse(secretString)
+                handlerProps.buckets[bucketName] = bucketAccessor(
+                    new S3Client({
+                        region: process.env.REGION,
+                        credentials: {
+                            accessKeyId: secret.accessKeyId,
+                            secretAccessKey: secret.secretAccessKey,
+                        },
+                    }),
+                    bucketName
+                )
+            }
         }
         return handlerProps
     }

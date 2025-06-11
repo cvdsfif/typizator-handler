@@ -651,7 +651,7 @@ const createLambda = <R extends ApiDefinition>(
         ...specificLambdaProperties?.logGroupProps
     })
 
-    const bucketsSecrets: Record<string, string> = {}
+    const bucketsVars: Record<string, string> = {}
 
     props.s3Buckets?.map(bucketProps => {
         const bucketName = bucketProps.bucketName
@@ -710,7 +710,7 @@ const createLambda = <R extends ApiDefinition>(
             },
         })
 
-        bucketsSecrets[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`] = bucketUserSecret.secretArn
+        bucketsVars[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`] = bucketUserSecret.secretArn
     })
 
     let lambdaProperties = {
@@ -744,7 +744,7 @@ const createLambda = <R extends ApiDefinition>(
             SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
             TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
             REGION: props.env?.region,
-            ...bucketsSecrets,
+            ...bucketsVars,
         }
     } as NodejsFunctionProps;
 
