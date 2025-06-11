@@ -656,7 +656,7 @@ const createLambda = <R extends ApiDefinition>(
     props.s3Buckets?.map(bucketProps => {
         const bucketName = bucketProps.bucketName
 
-        const bucket = new Bucket(scope, `${camelCasePath}-${bucketName}`, {
+        const bucket = new Bucket(scope, `${camelCasePath}-S3Bucket-${bucketName}`, {
             bucketName,
             publicReadAccess: false,
             removalPolicy: RemovalPolicy.DESTROY,
