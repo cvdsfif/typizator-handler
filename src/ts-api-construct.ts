@@ -659,7 +659,7 @@ const createLambda = <R extends ApiDefinition>(
         const bucket = new Bucket(scope, `${camelCasePath}-${bucketName}`, {
             bucketName,
             publicReadAccess: false,
-            removalPolicy: RemovalPolicy.SNAPSHOT,
+            removalPolicy: RemovalPolicy.DESTROY,
             blockPublicAccess: BlockPublicAccess.BLOCK_ACLS_ONLY,
             cors: [
                 {
