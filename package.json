@@ -1,6 +1,6 @@
 {
   "name": "typizator-handler",
-  "version": "4.4.0-beta.2",
+  "version": "4.4.0-beta.3",
   "description": "Database facade and handler converting JSON events to strict types for AWS lambdas and similar applications",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
