@@ -605,7 +605,7 @@ const createTelegrafSetupLambda = <R extends ApiDefinition>(
 const createLambda = <R extends ApiDefinition>(
     {
         scope, props, subPath, sharedLayer, key, filePath, specificLambdaProperties, vpc,
-        database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
+        database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy, bucketVars
     }: {
         scope: Construct,
         props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -620,7 +620,8 @@ const createLambda = <R extends ApiDefinition>(
         databaseSG?: ISecurityGroup,
         lambdaSG?: ISecurityGroup,
         insightsLayer?: ILayerVersion,
-        insightsLayerPolicy?: IManagedPolicy
+        insightsLayerPolicy?: IManagedPolicy,
+        bucketVars?: Record<string, string>
     }
 ) => {
     const handler = requireHereAndUp(`${filePath}`)[key]
@@ -649,68 +650,6 @@ const createLambda = <R extends ApiDefinition>(
         retention: RetentionDays.THREE_DAYS,
         ...props.logGroupProps,
         ...specificLambdaProperties?.logGroupProps
-    })
-
-    const bucketsVars: Record<string, string> = {}
-
-    props.s3Buckets?.map(bucketProps => {
-        const bucketName = bucketProps.bucketName
-
-        const bucket = new Bucket(scope, `${camelCasePath}-S3Bucket-${bucketName}`, {
-            bucketName,
-            publicReadAccess: false,
-            removalPolicy: RemovalPolicy.DESTROY,
-            blockPublicAccess: BlockPublicAccess.BLOCK_ACLS_ONLY,
-            cors: [
-                {
-                    allowedOrigins: ['*'],
-                    allowedMethods: [HttpMethods.GET, HttpMethods.HEAD, HttpMethods.POST, HttpMethods.PUT, HttpMethods.DELETE],
-                    allowedHeaders: ['*'],
-                    maxAge: S3_MAX_AGE,
-                },
-            ],
-        })
-
-        if (bucketProps.publicAccess) {
-            bucket.addToResourcePolicy(
-                new PolicyStatement({
-                    effect: Effect.ALLOW,
-                    actions: ['s3:GetObject'],
-                    resources: [`${bucket.bucketArn}/*`],
-                    principals: [new AnyPrincipal()], // Allow public access
-                })
-            )
-        }
-
-        const bucketUser = new User(scope, `${camelCasePath}-${bucketName}-bucket-user`, {
-            userName: `${camelCasePath}-${bucketName}-bucket-user`,
-        })
-
-        bucket.addToResourcePolicy(
-            new PolicyStatement({
-                effect: Effect.ALLOW,
-                actions: ['s3:PutObject', 's3:DeleteObject', 's3:GetObject'],
-                resources: [`${bucket.bucketArn}/*`],
-                principals: [bucketUser],
-            })
-        )
-
-        const accessKey = new CfnAccessKey(scope, `${camelCasePath}-${bucketName}-bucket-user-access-key`, {
-            userName: bucketUser.userName,
-        })
-
-        const bucketUserSecret = new Secret(scope, `${camelCasePath}-${bucketName}-bucket-user-secret`, {
-            secretName: `${props.deployFor}-bucket-user-secret`,
-            generateSecretString: {
-                secretStringTemplate: JSON.stringify({
-                    accessKeyId: accessKey.ref,
-                    secretAccessKey: accessKey.attrSecretAccessKey,
-                }),
-                generateStringKey: 'anyKey'
-            },
-        })
-
-        bucketsVars[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`] = bucketUserSecret.secretArn
     })
 
     let lambdaProperties = {
@@ -744,7 +683,7 @@ const createLambda = <R extends ApiDefinition>(
             SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
             TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
             REGION: props.env?.region,
-            ...bucketsVars,
+            ...bucketVars,
         }
     } as NodejsFunctionProps;
 
@@ -801,7 +740,7 @@ const connectLambda =
         {
             scope, props, subPath, httpApi, sharedLayer, key, keyKebabCase, specificLambdaProperties,
             vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy,
-            isHidden
+            isHidden, bucketVars
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -818,7 +757,8 @@ const connectLambda =
             lambdaSG?: ISecurityGroup,
             insightsLayer?: ILayerVersion,
             insightsLayerPolicy?: IManagedPolicy,
-            isHidden: boolean
+            isHidden: boolean,
+            bucketVars?: Record<string, string>
         }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -833,7 +773,8 @@ const connectLambda =
             vpc,
             database, databaseSG, lambdaSG,
             databaseReadReplica,
-            insightsLayer, insightsLayerPolicy
+            insightsLayer, insightsLayerPolicy,
+            bucketVars
         })
 
         if (!isHidden) {
@@ -882,7 +823,7 @@ const createLambdasForApi =
     <R extends ApiDefinition>(
         {
             scope, props, subPath, apiMetadata, httpApi, sharedLayer, lambdaPropertiesTree,
-            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy, bucketVars
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -897,7 +838,8 @@ const createLambdasForApi =
             databaseSG?: ISecurityGroup,
             lambdaSG?: ISecurityGroup,
             insightsLayer?: ILayerVersion,
-            insightsLayerPolicy?: IManagedPolicy
+            insightsLayerPolicy?: IManagedPolicy,
+            bucketVars?: Record<string, string>
         }
     ) => {
         const lambdas = {} as ApiLambdas<R>;
@@ -922,7 +864,7 @@ const createLambdasForApi =
                         vpc,
                         database, databaseSG, lambdaSG,
                         databaseReadReplica,
-                        insightsLayer, insightsLayerPolicy
+                        insightsLayer, insightsLayerPolicy, bucketVars
                     }
                 )
             else
@@ -942,7 +884,8 @@ const createLambdasForApi =
                         vpc,
                         database, databaseReadReplica, databaseSG, lambdaSG,
                         insightsLayer, insightsLayerPolicy,
-                        isHidden: data.hidden
+                        isHidden: data.hidden,
+                        bucketVars
                     }
                 )
         }
@@ -972,7 +915,8 @@ type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> &
     vpc: Vpc,
     sharedLayer: LayerVersion,
     insightsLayer?: ILayerVersion,
-    insightsLayerPolicy?: IManagedPolicy
+    insightsLayerPolicy?: IManagedPolicy,
+    bucketVars?: Record<string, string>
 }
 
 const listLambdaArchitectures =
@@ -1081,7 +1025,8 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
             sharedLayer: this.sharedLayer,
             insightsLayer: props.parentConstruct.insightsLayer,
             insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy,
-            corsConfiguration: props.corsConfiguration ?? props.parentConstruct.corsConfiguration
+            corsConfiguration: props.corsConfiguration ?? props.parentConstruct.corsConfiguration,
+            bucketVars: props.parentConstruct.bucketVars
         } as InnerDependentApiProperties<T>
         const apiInfo = createHttpApi(this, innerProps, kebabToCamel(innerProps.apiMetadata.path.replace("/", "-")))
         this.httpApi = apiInfo.api
@@ -1102,7 +1047,8 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
                 databaseSG: innerProps.databaseSG,
                 lambdaSG: innerProps.lambdaSG,
                 insightsLayer: innerProps.insightsLayer,
-                insightsLayerPolicy: innerProps.insightsLayerPolicy
+                insightsLayerPolicy: innerProps.insightsLayerPolicy,
+                bucketVars: innerProps.bucketVars
             }
         )
     }
@@ -1172,6 +1118,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      * Whether the database is an Aurora cluster
      */
     readonly auroraCluster: boolean
+    /**
+     * Bucket variables created by the construct
+     */
+    readonly bucketVars?: Record<string, string>
 
     private readonly sharedLayer?: LayerVersion
 
@@ -1205,6 +1155,68 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             this.insightsLayer = LayerVersion.fromLayerVersionArn(this, 'LayerFromArn', props.lambdaInsightsArn);
             this.insightsLayerPolicy = ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLambdaInsightsExecutionRolePolicy')
         }
+
+        const bucketVars = {} as Record<string, string>
+        this.bucketVars = bucketVars
+        props.s3Buckets?.map(bucketProps => {
+            const bucketName = bucketProps.bucketName
+
+            const bucket = new Bucket(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}`, {
+                bucketName,
+                publicReadAccess: false,
+                removalPolicy: RemovalPolicy.DESTROY,
+                blockPublicAccess: BlockPublicAccess.BLOCK_ACLS_ONLY,
+                cors: [
+                    {
+                        allowedOrigins: ['*'],
+                        allowedMethods: [HttpMethods.GET, HttpMethods.HEAD, HttpMethods.POST, HttpMethods.PUT, HttpMethods.DELETE],
+                        allowedHeaders: ['*'],
+                        maxAge: S3_MAX_AGE,
+                    },
+                ],
+            })
+
+            if (bucketProps.publicAccess) {
+                bucket.addToResourcePolicy(
+                    new PolicyStatement({
+                        effect: Effect.ALLOW,
+                        actions: ['s3:GetObject'],
+                        resources: [`${bucket.bucketArn}/*`],
+                        principals: [new AnyPrincipal()], // Allow public access
+                    })
+                )
+            }
+
+            const bucketUser = new User(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user`, {
+                userName: `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user`,
+            })
+
+            bucket.addToResourcePolicy(
+                new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ['s3:PutObject', 's3:DeleteObject', 's3:GetObject'],
+                    resources: [`${bucket.bucketArn}/*`],
+                    principals: [bucketUser],
+                })
+            )
+
+            const accessKey = new CfnAccessKey(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user-access-key`, {
+                userName: bucketUser.userName,
+            })
+
+            const bucketUserSecret = new Secret(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user-secret`, {
+                secretName: `${props.deployFor}-bucket-user-secret`,
+                generateSecretString: {
+                    secretStringTemplate: JSON.stringify({
+                        accessKeyId: accessKey.ref,
+                        secretAccessKey: accessKey.attrSecretAccessKey,
+                    }),
+                    generateStringKey: 'anyKey'
+                },
+            })
+
+            bucketVars[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`] = bucketUserSecret.secretArn
+        })
 
         this.auroraCluster = props.auroraCluster ?? false
         if (props.connectDatabase) {
@@ -1290,7 +1302,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                         databaseSG: this.databaseSG,
                         lambdaSG: this.lambdaSG,
                         insightsLayer: this.insightsLayer,
-                        insightsLayerPolicy: this.insightsLayerPolicy
+                        insightsLayerPolicy: this.insightsLayerPolicy,
+                        bucketVars
                     }
                 )
                 const customResourceProvider = new Provider(
@@ -1334,7 +1347,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             lambdaPropertiesTree: props.lambdaPropertiesTree,
             vpc: this.vpc, database: this.database, databaseSG: this.databaseSG,
             lambdaSG: this.lambdaSG, databaseReadReplica: this.databaseReadReplica,
-            insightsLayer: this.insightsLayer, insightsLayerPolicy: this.insightsLayerPolicy
+            insightsLayer: this.insightsLayer, insightsLayerPolicy: this.insightsLayerPolicy,
+            bucketVars
         })
     }
 }
