@@ -657,6 +657,7 @@ const createLambda = <R extends ApiDefinition>(
         ...specificLambdaProperties?.logGroupProps
     })
 
+    console.log("Variables", Object.entries(bucketVars ?? {}).reduce((acc, [key, value]: any) => ({ ...acc, [key]: value.secretArn }), {}))
     let lambdaProperties = {
         entry: `${filePath}.ts`,
         handler: key as string,
@@ -1222,7 +1223,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 },
             })
 
-            bucketVars[`BUCKET_${bucketName.toUpperCase().replace(/-/g, "__").replace(/./g, "_")}_SECRET_ARN`] = {
+            bucketVars[`BUCKET_${bucketName.toUpperCase().replace(/-/g, "__").replace(/[.]/g, "_")}_SECRET_ARN`] = {
                 secretArn: bucketUserSecret.secretArn,
                 secret: bucketUserSecret
             }

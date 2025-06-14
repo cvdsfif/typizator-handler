@@ -500,7 +500,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         if (connectorProps.buckets) {
             handlerProps.buckets = {}
             for (const bucketName of connectorProps.buckets) {
-                const secretArn = process.env[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`]
+                const secretArn = process.env[`BUCKET_${bucketName.toUpperCase().replace(/-/g, "__").replace(/[.]/g, "_")}_SECRET_ARN`]
                 if (!secretArn) {
                     throw new Error(`Bucket ${bucketName} not configured`)
                 }
