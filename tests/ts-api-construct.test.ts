@@ -62,7 +62,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                             "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                            "serverless-postgres", "lambda-extension-service",
+                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                         ]
                     },
                     lambdaPropertiesTree: {
@@ -267,7 +267,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                             "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses",
+                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                         ]
                     },
                     lambdaPropertiesTree: {

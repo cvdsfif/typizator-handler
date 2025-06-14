@@ -40,7 +40,8 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 }
             }
@@ -64,7 +65,8 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 }
             }
@@ -88,7 +90,8 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 }
             }
@@ -114,7 +117,8 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 }
             }
@@ -140,7 +144,8 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 }
             }
@@ -166,7 +171,8 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 }
             }
@@ -190,7 +196,8 @@ describe("Testing the cases when the constructs creation should fail", () => {
                     sourceMap: false,
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
-                        "aws-cdk-lib", "constructs", "ulid", "moment", "firebase-admin", "luxon", "@aws-sdk/client-ses",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 }
             }

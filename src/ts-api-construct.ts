@@ -34,6 +34,11 @@ import { BlockPublicAccess, Bucket, HttpMethods } from "aws-cdk-lib/aws-s3";
 
 const connectedTelegramWebhooks = new Set<string>()
 
+type BucketData = {
+    secretArn: string,
+    secret: Secret,
+}
+
 /**
  * Extended properties for the stack creation.
  * Allow to define the deployment target (production, staging, test...)
@@ -621,7 +626,7 @@ const createLambda = <R extends ApiDefinition>(
         lambdaSG?: ISecurityGroup,
         insightsLayer?: ILayerVersion,
         insightsLayerPolicy?: IManagedPolicy,
-        bucketVars?: Record<string, string>
+        bucketVars?: Record<string, BucketData>
     }
 ) => {
     const handler = requireHereAndUp(`${filePath}`)[key]
@@ -683,9 +688,9 @@ const createLambda = <R extends ApiDefinition>(
             SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
             TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
             REGION: props.env?.region,
-            ...bucketVars,
+            ...Object.entries(bucketVars ?? {}).reduce((acc, [key, value]: any) => ({ ...acc, [key]: value.secretArn }), {}),
         }
-    } as NodejsFunctionProps;
+    } as NodejsFunctionProps
 
     if (props.connectDatabase)
         lambdaProperties = addDatabaseProperties({
@@ -709,6 +714,8 @@ const createLambda = <R extends ApiDefinition>(
         resources: ["*"],
         effect: Effect.ALLOW
     }))
+
+    Object.values(bucketVars ?? {}).forEach(value => value.secret.grantRead(lambda))
 
     if (connectFirebase) props.firebaseAdminConnect?.secret.grantRead(lambda)
     if (connectedSecrets) props.secrets?.forEach(secret => secret.grantRead(lambda))
@@ -758,7 +765,7 @@ const connectLambda =
             insightsLayer?: ILayerVersion,
             insightsLayerPolicy?: IManagedPolicy,
             isHidden: boolean,
-            bucketVars?: Record<string, string>
+            bucketVars?: Record<string, BucketData>
         }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -839,7 +846,7 @@ const createLambdasForApi =
             lambdaSG?: ISecurityGroup,
             insightsLayer?: ILayerVersion,
             insightsLayerPolicy?: IManagedPolicy,
-            bucketVars?: Record<string, string>
+            bucketVars?: Record<string, BucketData>
         }
     ) => {
         const lambdas = {} as ApiLambdas<R>;
@@ -916,7 +923,7 @@ type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> &
     sharedLayer: LayerVersion,
     insightsLayer?: ILayerVersion,
     insightsLayerPolicy?: IManagedPolicy,
-    bucketVars?: Record<string, string>
+    bucketVars?: Record<string, BucketData>
 }
 
 const listLambdaArchitectures =
@@ -1121,7 +1128,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
     /**
      * Bucket variables created by the construct
      */
-    readonly bucketVars?: Record<string, string>
+    readonly bucketVars?: Record<string, BucketData>
 
     private readonly sharedLayer?: LayerVersion
 
@@ -1156,7 +1163,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             this.insightsLayerPolicy = ManagedPolicy.fromAwsManagedPolicyName('CloudWatchLambdaInsightsExecutionRolePolicy')
         }
 
-        const bucketVars = {} as Record<string, string>
+        const bucketVars = {} as Record<string, BucketData>
         this.bucketVars = bucketVars
         props.s3Buckets?.map(bucketProps => {
             const bucketName = bucketProps.bucketName
@@ -1215,7 +1222,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 },
             })
 
-            bucketVars[`BUCKET_${bucketName.toUpperCase()}_SECRET_ARN`] = bucketUserSecret.secretArn
+            bucketVars[`BUCKET_${bucketName.toUpperCase().replace(/-/g, "__").replace(/./g, "_")}_SECRET_ARN`] = {
+                secretArn: bucketUserSecret.secretArn,
+                secret: bucketUserSecret
+            }
         })
 
         this.auroraCluster = props.auroraCluster ?? false
