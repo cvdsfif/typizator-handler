@@ -158,14 +158,22 @@ export type SecretValue = {
 
 const bucketAccessor = (s3Client: S3Client, bucketName: string) => {
     return ({
-        getStringContents: async (key: string) => {
+        getStringContents: async (key: string, encoding: string = "utf-8") => {
             try {
                 const command = new GetObjectCommand({
                     Bucket: bucketName,
                     Key: key
                 })
                 const response = await s3Client.send(command)
-                return [null, response.Body?.transformToString()]
+                const body = await response.Body?.transformToByteArray()
+                if (!body) {
+                    return ['No body content found', null]
+                }
+
+                if (encoding === "unicode") {
+                    return [null, Buffer.from(body.buffer).toString('utf16le')]
+                }
+                return [null, Buffer.from(body.buffer).toString(encoding as any)]
             } catch (e: any) {
                 console.error(`Error during file download from S3: ${e.message}`)
                 return [e.message, null]
