@@ -626,7 +626,7 @@ const createLambda = <R extends ApiDefinition>(
         lambdaSG?: ISecurityGroup,
         insightsLayer?: ILayerVersion,
         insightsLayerPolicy?: IManagedPolicy,
-        bucketVars?: Record<string, BucketData>
+        bucketVars: Record<string, BucketData>
     }
 ) => {
     const handler = requireHereAndUp(`${filePath}`)[key]
@@ -657,7 +657,6 @@ const createLambda = <R extends ApiDefinition>(
         ...specificLambdaProperties?.logGroupProps
     })
 
-    console.log("Variables", Object.entries(bucketVars ?? {}).reduce((acc, [key, value]: any) => ({ ...acc, [key]: value.secretArn }), {}))
     let lambdaProperties = {
         entry: `${filePath}.ts`,
         handler: key as string,
@@ -689,7 +688,7 @@ const createLambda = <R extends ApiDefinition>(
             SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
             TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
             REGION: props.env?.region,
-            ...Object.entries(bucketVars ?? {}).reduce((acc, [key, value]: any) => ({ ...acc, [key]: value.secretArn }), {}),
+            ...Object.entries(bucketVars).reduce((acc, [key, value]: any) => ({ ...acc, [key]: value.secretArn }), {}),
         }
     } as NodejsFunctionProps
 
@@ -716,7 +715,7 @@ const createLambda = <R extends ApiDefinition>(
         effect: Effect.ALLOW
     }))
 
-    Object.values(bucketVars ?? {}).forEach(value => value.secret.grantRead(lambda))
+    Object.values(bucketVars).forEach(value => value.secret.grantRead(lambda))
 
     if (connectFirebase) props.firebaseAdminConnect?.secret.grantRead(lambda)
     if (connectedSecrets) props.secrets?.forEach(secret => secret.grantRead(lambda))
@@ -766,7 +765,7 @@ const connectLambda =
             insightsLayer?: ILayerVersion,
             insightsLayerPolicy?: IManagedPolicy,
             isHidden: boolean,
-            bucketVars?: Record<string, BucketData>
+            bucketVars: Record<string, BucketData>
         }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -822,8 +821,8 @@ const fillLocalAccessProperties = (
     const localAccessProperties = {
         ...accessProperties,
     } satisfies AccessProperties
-    if (lambdaPropertiesTree?.accessMask) localAccessProperties.accessMask = lambdaPropertiesTree.accessMask
-    if (lambdaPropertiesTree?.authorizedIps) localAccessProperties.authorizedIps = lambdaPropertiesTree.authorizedIps
+    if (lambdaPropertiesTree?.accessMask && !localAccessProperties.accessMask) localAccessProperties.accessMask = lambdaPropertiesTree.accessMask
+    if (lambdaPropertiesTree?.authorizedIps && !localAccessProperties.authorizedIps) localAccessProperties.authorizedIps = lambdaPropertiesTree.authorizedIps
     return localAccessProperties
 }
 
@@ -847,7 +846,7 @@ const createLambdasForApi =
             lambdaSG?: ISecurityGroup,
             insightsLayer?: ILayerVersion,
             insightsLayerPolicy?: IManagedPolicy,
-            bucketVars?: Record<string, BucketData>
+            bucketVars: Record<string, BucketData>
         }
     ) => {
         const lambdas = {} as ApiLambdas<R>;
@@ -866,8 +865,8 @@ const createLambdasForApi =
                         httpApi,
                         sharedLayer,
                         lambdaPropertiesTree: {
+                            ...localAccessProperties,
                             ...(lambdaPropertiesTree as any)?.[key],
-                            ...localAccessProperties
                         },
                         vpc,
                         database, databaseSG, lambdaSG,
@@ -924,7 +923,7 @@ type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> &
     sharedLayer: LayerVersion,
     insightsLayer?: ILayerVersion,
     insightsLayerPolicy?: IManagedPolicy,
-    bucketVars?: Record<string, BucketData>
+    bucketVars: Record<string, BucketData>
 }
 
 const listLambdaArchitectures =
@@ -1129,7 +1128,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
     /**
      * Bucket variables created by the construct
      */
-    readonly bucketVars?: Record<string, BucketData>
+    readonly bucketVars: Record<string, BucketData>
 
     private readonly sharedLayer?: LayerVersion
 

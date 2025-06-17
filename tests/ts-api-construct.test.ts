@@ -96,6 +96,14 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             authorizedIps: ["10.0.0.1"],
                             accessMask: 0b1000,
                             world: {
+                                accessMask: 0b10,
+                                authorizedIps: ["10.0.0.2"],
+                                nodejsFunctionProps: {
+                                    runtime: Runtime.NODEJS_20_X,
+                                    architecture: Architecture.X86_64
+                                }
+                            },
+                            word: {
                                 nodejsFunctionProps: {
                                     runtime: Runtime.NODEJS_20_X,
                                     architecture: Architecture.X86_64
@@ -177,6 +185,18 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         template.hasResourceProperties("AWS::Lambda::Function",
             Match.objectLike({
                 "Description": "Test Typescript API - /cruel/world (test)",
+                "Environment": {
+                    "Variables": {
+                        "ACCESS_MASK": "2",
+                        "IP_LIST": `["10.0.0.2"]`
+                    }
+                }
+            })
+        )
+
+        template.hasResourceProperties("AWS::Lambda::Function",
+            Match.objectLike({
+                "Description": "Test Typescript API - /cruel/word (test)",
                 "Environment": {
                     "Variables": {
                         "ACCESS_MASK": "8",
@@ -298,7 +318,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             },
                         },
                         cruel: {
-                            authorizedIps: ["10.0.0.1"],
+                            authorizedIps: ["10.0.0.2"],
                             accessMask: 0b1000,
                             world: {
                                 nodejsFunctionProps: {

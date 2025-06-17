@@ -48,7 +48,8 @@ describe("Test interfaces behaviour on a real database", () => {
         firebaseAdmin?: FirebaseAdminConnection,
         secrets?: SecretsDictionary,
         telegraf?: Telegraf,
-        sesClient?: any
+        sesClient?: any,
+        buckets?: any
     }
     const dataApi = apiS({
         getData: { args: [], retVal: intS }
@@ -66,6 +67,8 @@ describe("Test interfaces behaviour on a real database", () => {
     const telegrafMock = jest.fn().mockImplementation((_: string) => telegrafStub)
 
     const sesClientMock = jest.fn()
+    let s3ClientMock: any
+    const s3SenderMock = jest.fn()
 
     beforeAll(async () => {
         jest.mock("@aws-sdk/client-secrets-manager", () => ({
@@ -85,6 +88,19 @@ describe("Test interfaces behaviour on a real database", () => {
         jest.mock("@aws-sdk/client-ses", () => ({
             SESClient: jest.fn().mockImplementation((...args) => {
                 return sesClientMock(...args)
+            })
+        }))
+
+        s3ClientMock = jest.fn().mockImplementation(() => ({
+            send: s3SenderMock
+        }))
+
+        jest.mock("@aws-sdk/client-s3", () => ({
+            S3Client: jest.fn().mockImplementation((...args) => {
+                return s3ClientMock(...args)
+            }),
+            GetObjectCommand: jest.fn().mockImplementation((...args) => {
+                return args
             })
         }))
 
@@ -126,6 +142,7 @@ describe("Test interfaces behaviour on a real database", () => {
 
     const initHandlers = async (props?: {
         connectDatabase?: boolean
+        buckets?: string[]
     }) => {
         handlers = require("../../src")
         getDataHandler = handlers.lambdaConnector(
@@ -135,7 +152,8 @@ describe("Test interfaces behaviour on a real database", () => {
                 return result.rows[0].one;
             },
             {
-                databaseConnected: props?.connectDatabase !== false
+                databaseConnected: props?.connectDatabase !== false,
+                buckets: props?.buckets
             }
         )
     }
@@ -164,6 +182,7 @@ describe("Test interfaces behaviour on a real database", () => {
         sendForMulticastMock.mockReset()
         telegrafMock.mockReset().mockImplementation((_: string) => telegrafStub)
         telegrafHandlerMock.mockReset()
+        s3SenderMock.mockReset()
         resetMockValues()
         process.env = externalEnvironment!
     })
@@ -747,5 +766,270 @@ describe("Test interfaces behaviour on a real database", () => {
 
         // AND the SES client exists for the lambda's properties
         expect(sesClientReceived).toBeDefined()
+    })
+
+    test("Should correctly configure an S3 client for a lambda", async () => {
+        // GIVEN we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+
+        // AND there is a secret defined
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async () => { },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // WHEN calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // THEN the SES client is correctly configured
+        expect(s3ClientMock).toHaveBeenCalledWith(expect.objectContaining({
+            region: "dummy-region",
+            credentials: {
+                accessKeyId: "id",
+                secretAccessKey: "key"
+            }
+        }))
+    })
+
+    test.failing("The S3 creation should fail if the bucket is not configured", async () => {
+        // GIVEN we have an S3 client configured but no buckets are defined
+        process.env.REGION = "dummy-region"
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async () => { },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // WHEN calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // THEN the test is failing
+    })
+
+    test.failing("The S3 creation should fail if the secret string for the bucket is not defined", async () => {
+        // GIVEN we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+
+        // AND there no secret string is defined
+
+        // AND handlers are initialized
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async () => { },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // WHEN calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // THEN the test is failing
+    })
+
+    test("The S3 client should be able to read data from a bucket", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async () => { },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // WHEN calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // THEN the read command returns a string
+        s3SenderMock.mockReturnValueOnce({
+            Body: {
+                transformToByteArray: () => {
+                    return Promise.resolve(new Uint8Array(Buffer.from("contents")))
+                }
+            }
+        })
+    })
+
+    test("The S3 client should be able to read data from a bucket", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // AND the read command returns a string
+        s3SenderMock.mockReturnValueOnce({
+            Body: {
+                transformToByteArray: () => {
+                    return Promise.resolve(new Uint8Array(Buffer.from("contents")))
+                }
+            }
+        })
+
+        // WHEN calling the reader function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.getStringContents("key")
+
+        // THEN the string contents are correctly read
+        expect(stringContents).toEqual([null, "contents"])
+    })
+
+    test("The S3 client should be able to read Unicode data from a bucket", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // AND the read command returns a string
+        s3SenderMock.mockReturnValueOnce({
+            Body: {
+                transformToByteArray: () => {
+                    return Promise.resolve(new Uint8Array(Buffer.from("contents", "utf16le")))
+                }
+            }
+        })
+
+        // WHEN calling the reader function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.getStringContents("key", "unicode")
+
+        // THEN the string contents are correctly read
+        expect(stringContents).toEqual([null, "contents"])
+    })
+
+    test("The S3 client should return an error if nothing is returned", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // AND the read command returns a string
+        s3SenderMock.mockReturnValueOnce({
+            Body: {
+                transformToByteArray: () => {
+                    return Promise.resolve(undefined)
+                }
+            }
+        })
+
+        // WHEN calling the reader function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.getStringContents("key")
+
+        // THEN the string contents are correctly read
+        expect(stringContents).toEqual(["No body content found", null])
+    })
+
+    test("The S3 client should return an eerror if an exception is raised", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // AND the read command returns a string
+        s3SenderMock.mockReturnValueOnce({
+            Body: {
+                transformToByteArray: () => {
+                    throw new Error("Error")
+                }
+            }
+        })
+
+        // WHEN calling the reader function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.getStringContents("key")
+
+        // THEN the string contents are correctly read
+        expect(stringContents).toEqual(["Error", null])
     })
 })

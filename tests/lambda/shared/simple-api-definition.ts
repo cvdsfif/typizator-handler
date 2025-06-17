@@ -5,7 +5,8 @@ export const simpleApiS = apiS({
     noMeow: { args: [] },
     helloWorld: { args: [stringS.notNull, bigintS.notNull], retVal: stringS.notNull },
     cruel: {
-        world: { args: [stringS.notNull], retVal: stringS.notNull }
+        world: { args: [stringS.notNull], retVal: stringS.notNull },
+        word: { args: [stringS.notNull], retVal: stringS.notNull },
     }
 })
 
@@ -18,7 +19,8 @@ export const simpleApiWithFirebaseS = apiS({
     telegrafInline: { args: [] },
     helloWorld: { args: [stringS.notNull, bigintS.notNull], retVal: stringS.notNull },
     cruel: {
-        world: { args: [stringS.notNull], retVal: stringS.notNull }
+        world: { args: [stringS.notNull], retVal: stringS.notNull },
+        word: { args: [stringS.notNull], retVal: stringS.notNull },
     }
 })
 

@@ -767,6 +767,10 @@ In your handler, `HandlerProps` will contain a field with the contents of the li
 
 If you want to use AWS mail sending capacities in your lambdas, you can make the container pre-inject the client to the `sesClient` property of `HandlerProps`. To do it, it's enough to set to `true` the `sesClient` prop for the `lambdaConnector` used to connect the lambda function. Note that the client will automatically be connected to the main AWS region of the stack.
 
+### S3 buckets injection
+
+You can set the stack's `buckets` property to an array of bucket definitions, each of them containing the `bucketName` and `publicAccess` properties. The `publicAccess` property is a boolean that indicates if the bucket is public or not. This creates a client for each bucket and injects it to the `buckets` property of `HandlerProps` if the bucket's name is included in the `buckets` array property of the lambda.
+
 ## Tests
 
 I recommend to use the `@testcontainers/postgresql` library to set up database-connected tests in a real environment. To accelerate test suites execution, I recommend to use the jest's `--runInBand` option and set up your tests suites similar to that:

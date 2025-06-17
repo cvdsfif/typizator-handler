@@ -165,6 +165,7 @@ const bucketAccessor = (s3Client: S3Client, bucketName: string) => {
                     Key: key
                 })
                 const response = await s3Client.send(command)
+                console.log("Response got", response)
                 const body = await response.Body?.transformToByteArray()
                 if (!body) {
                     return ['No body content found', null]
