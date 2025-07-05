@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+Added `skipHandlerPreload` property to the API construct to allow skipping handler preload at deploy time. This can be useful for very large configuration implying external dependencies that can only be completely loaded at runtime.
 
 ## 4.4.0 - 2025-06-17
 S3 buckets injection support added

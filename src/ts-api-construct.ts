@@ -254,6 +254,11 @@ export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
      * Optional map of S3 buckets to create on the stack
      */
     s3Buckets?: S3BucketProperties[],
+    /**
+     * If true, the handler is not preloaded to be checked at deploy time. This can be useful for very large configuration implying external dependencies 
+     * that can only be completely loaded at runtime
+     */
+    skipHandlerPreload?: boolean,
 }
 
 /**
@@ -629,24 +634,27 @@ const createLambda = <R extends ApiDefinition>(
         bucketVars: Record<string, BucketData>
     }
 ) => {
-    const handler = requireHereAndUp(`${filePath}`)[key]
-    const resourcesConnected = handler?.connectedResources
-    if (!resourcesConnected) throw new Error(`No appropriate handler connected for ${filePath}`)
-    const connectedResourcesArray = Array.from(resourcesConnected)
-    if (!props.connectDatabase && connectedResourcesArray.includes(ConnectedResources.DATABASE.toString()))
-        throw new Error(`Trying to connect database to a lambda on a non-connected stack in ${filePath}`)
+    if (!props.skipHandlerPreload) {
+        const handler = requireHereAndUp(`${filePath}`)[key]
+        const resourcesConnected = handler?.connectedResources
+        if (!resourcesConnected) throw new Error(`No appropriate handler connected for ${filePath}`)
+        const connectedResourcesArray = Array.from(resourcesConnected)
+        if (!props.connectDatabase && connectedResourcesArray.includes(ConnectedResources.DATABASE.toString()))
+            throw new Error(`Trying to connect database to a lambda on a non-connected stack in ${filePath}`)
 
-    const connectFirebase = connectedResourcesArray.includes(ConnectedResources.FIREBASE_ADMIN.toString())
-    if (!props.firebaseAdminConnect && connectFirebase)
-        throw new Error(`Trying to connect firebase admin to a lambda on a non-connected stack in ${filePath}`)
+        const connectFirebase = connectedResourcesArray.includes(ConnectedResources.FIREBASE_ADMIN.toString())
+        if (!props.firebaseAdminConnect && connectFirebase)
+            throw new Error(`Trying to connect firebase admin to a lambda on a non-connected stack in ${filePath}`)
 
-    const connectedSecrets = connectedResourcesArray.includes(ConnectedResources.SECRETS.toString())
-    if (!props.secrets && connectedSecrets)
-        throw new Error(`Trying to inject secrets on a stack without secrets`);
+        const connectedSecrets = connectedResourcesArray.includes(ConnectedResources.SECRETS.toString())
+        if (!props.secrets && connectedSecrets)
+            throw new Error(`Trying to inject secrets on a stack without secrets`);
 
-    const connectedTelegraf = connectedResourcesArray.includes(ConnectedResources.TELEGRAF.toString())
-    if (!specificLambdaProperties?.telegrafSecret && connectedTelegraf)
-        throw new Error(`Trying to connect telegraf to a lambda on a non-connected stack in ${filePath}`)
+        const connectedTelegraf = connectedResourcesArray.includes(ConnectedResources.TELEGRAF.toString())
+        if (!specificLambdaProperties?.telegrafSecret && connectedTelegraf)
+            throw new Error(`Trying to connect telegraf to a lambda on a non-connected stack in ${filePath}`)
+    }
+
 
     const camelCasePath = kebabToCamel(filePath.replace("/", "-"))
 
@@ -683,9 +691,9 @@ const createLambda = <R extends ApiDefinition>(
             ...specificLambdaProperties?.nodejsFunctionProps?.environment,
             IP_LIST: specificLambdaProperties?.authorizedIps ? JSON.stringify(specificLambdaProperties?.authorizedIps) : undefined,
             ACCESS_MASK: specificLambdaProperties?.accessMask ? JSON.stringify(specificLambdaProperties?.accessMask) : undefined,
-            FB_SECRET_ARN: connectFirebase ? props.firebaseAdminConnect?.secret.secretArn : undefined,
-            FB_DATABASE_NAME: connectFirebase ? props.firebaseAdminConnect?.internalDatabaseName : undefined,
-            SECRETS_LIST: connectedSecrets ? props.secrets!.map(secret => secret.secretArn).join(",") : undefined,
+            FB_SECRET_ARN: props.firebaseAdminConnect?.secret.secretArn,
+            FB_DATABASE_NAME: props.firebaseAdminConnect?.internalDatabaseName,
+            SECRETS_LIST: props.secrets?.map(secret => secret.secretArn).join(","),
             TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
             REGION: props.env?.region,
             ...Object.entries(bucketVars).reduce((acc, [key, value]: any) => ({ ...acc, [key]: value.secretArn }), {}),
@@ -717,8 +725,8 @@ const createLambda = <R extends ApiDefinition>(
 
     Object.values(bucketVars).forEach(value => value.secret.grantRead(lambda))
 
-    if (connectFirebase) props.firebaseAdminConnect?.secret.grantRead(lambda)
-    if (connectedSecrets) props.secrets?.forEach(secret => secret.grantRead(lambda))
+    props.firebaseAdminConnect?.secret.grantRead(lambda)
+    props.secrets?.forEach(secret => secret.grantRead(lambda))
     specificLambdaProperties?.telegrafSecret?.grantRead(lambda)
 
     if (props.connectDatabase)
