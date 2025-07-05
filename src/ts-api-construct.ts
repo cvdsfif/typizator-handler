@@ -114,7 +114,12 @@ export type LambdaProperties = {
          */
         eventBody?: string
     }],
-    telegrafSecret?: Secret
+    telegrafSecret?: Secret,
+    /**
+     * If true, the handler is not preloaded to be checked at deploy time. This can be useful for very large configuration implying external dependencies 
+     * that can only be completely loaded at runtime
+     */
+    skipHandlerPreload?: boolean,
 } & AccessProperties
 
 /**
@@ -254,11 +259,6 @@ export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
      * Optional map of S3 buckets to create on the stack
      */
     s3Buckets?: S3BucketProperties[],
-    /**
-     * If true, the handler is not preloaded to be checked at deploy time. This can be useful for very large configuration implying external dependencies 
-     * that can only be completely loaded at runtime
-     */
-    skipHandlerPreload?: boolean,
 }
 
 /**
@@ -634,7 +634,7 @@ const createLambda = <R extends ApiDefinition>(
         bucketVars: Record<string, BucketData>
     }
 ) => {
-    if (!props.skipHandlerPreload) {
+    if (!specificLambdaProperties?.skipHandlerPreload) {
         const handler = requireHereAndUp(`${filePath}`)[key]
         const resourcesConnected = handler?.connectedResources
         if (!resourcesConnected) throw new Error(`No appropriate handler connected for ${filePath}`)
