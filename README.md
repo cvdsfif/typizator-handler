@@ -771,6 +771,10 @@ If you want to use AWS mail sending capacities in your lambdas, you can make the
 
 You can set the stack's `buckets` property to an array of bucket definitions, each of them containing the `bucketName` and `publicAccess` properties. The `publicAccess` property is a boolean that indicates if the bucket is public or not. This creates a client for each bucket and injects it to the `buckets` property of `HandlerProps` if the bucket's name is included in the `buckets` array property of the lambda.
 
+### Direct JSON return
+
+If you want to return the result of the handler's implementation directly to the client without any additional processing, you can set the `directReturn` property to `true` in the `lambdaConnector` used to connect the lambda function.
+
 ## Tests
 
 I recommend to use the `@testcontainers/postgresql` library to set up database-connected tests in a real environment. To accelerate test suites execution, I recommend to use the jest's `--runInBand` option and set up your tests suites similar to that:

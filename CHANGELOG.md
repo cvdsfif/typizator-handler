@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+Added `directReturn` property to the lambda connector to allow returning the result of the handler's implementation directly to the client without any additional processing.
 
 ## 4.4.2 - 2025-07-05
 Added `skipHandlerPreload` property to the API construct to allow skipping handler preload at deploy time. This can be useful for very large configuration implying external dependencies that can only be completely loaded at runtime.

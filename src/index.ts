@@ -224,7 +224,11 @@ export type HandlerProps = {
     /**
      * If present, a dictionary of BucketAccess objects giving access to the S3 buckets
      */
-    buckets?: Record<string, BucketAccess>
+    buckets?: Record<string, BucketAccess>,
+    /**
+     * If `true`, the lambda will return the result of the handler's implementation directly to the client without any additional processing
+     */
+    directReturn?: boolean,
 }
 
 const callImplementation = async <T extends FunctionCallDefinition>(
@@ -248,6 +252,7 @@ const callImplementation = async <T extends FunctionCallDefinition>(
         })
 
     }
+    if (props.directReturn) return await implementation(props, ...args as any)
     return JSONBig.stringify(await implementation(props, ...args as any));
 }
 
@@ -434,6 +439,10 @@ export type ConnectorProperties = {
      * - `BUCKET_{bucketName.toUpperCase()}_SECRET_ARN` is the arn of the secret containing the access key id and secret access key of the user created for the bucket
      */
     buckets?: string[],
+    /**
+     * If `true`, the lambda will return the result of the handler's implementation directly to the client without any additional processing
+     */
+    directReturn?: boolean,
 }
 
 const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) => {
@@ -491,6 +500,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
 
     const setupProps = async () => {
         const handlerProps = {} as HandlerProps
+        if (connectorProps.directReturn) {
+            handlerProps.directReturn = true
+        }
         if (connectorProps.databaseConnected) {
             const client = await connectPostgresDb(connectorProps)
             handlerProps.db = connectDatabase(client)
@@ -576,6 +588,12 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                 const body = JSON.parse(props.event!.body)
                 await props.telegraf.handleUpdate(body)
                 return ({ data: "{}" })
+            }
+            if (connectorProps.directReturn) {
+                return {
+                    statusCode: 200,
+                    body: data
+                }
             }
             if (props.headersContainer) {
                 const retval = ({

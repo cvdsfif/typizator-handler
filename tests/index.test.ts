@@ -35,6 +35,13 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
             simpleApiS.metadata.implementation.meow,
             () => Promise.resolve("Miaou")
         )
+
+    const meowHandlerDirect =
+        lambdaConnector(
+            simpleApiS.metadata.implementation.meow,
+            () => Promise.resolve("Miaou"),
+            { directReturn: true }
+        )
     const noMeowHandler =
         lambdaConnector(
             simpleApiS.metadata.implementation.noMeow,
@@ -46,6 +53,12 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
         lambdaConnector(
             simpleApiS.metadata.implementation.increment,
             (_: HandlerProps, check: SimpleType) => Promise.resolve({ id: check.id + 1n, name: `Incremented ${check.name}` })
+        )
+    const incrementHandlerDirect =
+        lambdaConnector(
+            simpleApiS.metadata.implementation.increment,
+            (_: HandlerProps, check: SimpleType) => Promise.resolve({ id: check.id + 1n, name: `Incremented ${check.name}` }),
+            { directReturn: true }
         )
     const helloWorldImpl = (_: HandlerProps, name: string, num: bigint) => Promise.resolve(`${num} greetings to ${name}`)
     const helloWorldHandler =
@@ -78,7 +91,13 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
             .toEqual({ data: `{"id":12345678901234567891,"name":"Incremented Thing"}` });
         expect(await helloWorldHandler({ body: `["me",1000]` })).toEqual({ data: `"1000 greetings to me"` });
         expect(await doubleArrayHandler({ body: `[["a","b"]]` })).toEqual({ data: `["a","b","a","b"]` });
-    });
+    })
+
+    test("Should check the handlers implementations with direct return", async () => {
+        expect(await meowHandlerDirect({ body: "" })).toEqual({ "statusCode": 200, "body": "Miaou" });
+        expect(await incrementHandlerDirect({ body: `[{"id":"12345678901234567890","name":"Thing"}]` }))
+            .toEqual({ "statusCode": 200, "body": { "id": 12345678901234567891n, "name": "Incremented Thing" } });
+    })
 
     test("Should empty connected resources for the appropriate handlers", () => {
         expect((meowHandler as any).connectedResources).toEqual([]);
