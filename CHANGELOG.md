@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+Ability to return any status codes and headers in `directReturn` if needed.
 
 ## 4.5.0 - 2026-01-25
 Added `directReturn` property to the lambda connector to allow returning the result of the handler's implementation directly to the client without any additional processing.

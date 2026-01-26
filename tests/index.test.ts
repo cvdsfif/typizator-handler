@@ -94,9 +94,9 @@ describe("Testing the type conversion facade for AWS lambdas", () => {
     })
 
     test("Should check the handlers implementations with direct return", async () => {
-        expect(await meowHandlerDirect({ body: "" })).toEqual({ "statusCode": 200, "body": "Miaou" });
+        expect(await meowHandlerDirect({ body: "" })).toEqual("Miaou");
         expect(await incrementHandlerDirect({ body: `[{"id":"12345678901234567890","name":"Thing"}]` }))
-            .toEqual({ "statusCode": 200, "body": { "id": 12345678901234567891n, "name": "Incremented Thing" } });
+            .toEqual({ "id": 12345678901234567891n, "name": "Incremented Thing" });
     })
 
     test("Should empty connected resources for the appropriate handlers", () => {

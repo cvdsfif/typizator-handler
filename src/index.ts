@@ -590,10 +590,7 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                 return ({ data: "{}" })
             }
             if (connectorProps.directReturn) {
-                return {
-                    statusCode: 200,
-                    body: data
-                }
+                return data
             }
             if (props.headersContainer) {
                 const retval = ({
