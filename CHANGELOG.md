@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+
+## 4.6.0 - 2026-02-22
 S3 buckets write / delete support and access to credentials
 
 ## 4.5.1 - 2026-01-26
