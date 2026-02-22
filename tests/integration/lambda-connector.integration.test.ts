@@ -101,6 +101,12 @@ describe("Test interfaces behaviour on a real database", () => {
             }),
             GetObjectCommand: jest.fn().mockImplementation((...args) => {
                 return args
+            }),
+            PutObjectCommand: jest.fn().mockImplementation((...args) => {
+                return args
+            }),
+            DeleteObjectCommand: jest.fn().mockImplementation((...args) => {
+                return args
             })
         }))
 
@@ -994,7 +1000,7 @@ describe("Test interfaces behaviour on a real database", () => {
         expect(stringContents).toEqual(["No body content found", null])
     })
 
-    test("The S3 client should return an eerror if an exception is raised", async () => {
+    test("The S3 client should return an error if an exception is raised", async () => {
         // GIVEN the we have an S3 client configured
         process.env.REGION = "dummy-region"
         process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
@@ -1031,5 +1037,220 @@ describe("Test interfaces behaviour on a real database", () => {
 
         // THEN the string contents are correctly read
         expect(stringContents).toEqual(["Error", null])
+    })
+
+    test("The S3 client should give access to the bucket's credentials", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // AND the read command returns a string
+        s3SenderMock.mockReturnValueOnce({
+            Body: {
+                transformToByteArray: () => {
+                    return Promise.resolve(new Uint8Array(Buffer.from("contents", "utf16le")))
+                }
+            }
+        })
+
+        // WHEN getting the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+
+        // THEN the credentials are returned as expected
+        expect(configuredBucket.accessKeyId).toEqual("id")
+        expect(configuredBucket.secretAccessKey).toEqual("key")
+    })
+
+    test("The S3 client should be able to write Unicode data to a bucket", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // WHEN calling the writer function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.putStringContents("key", "contents", "unicode")
+
+        // THEN the string contents are correctly written
+        expect(stringContents).toEqual({ success: true })
+
+        // AND the mock was called with correct arguments
+        expect(s3SenderMock).toHaveBeenCalledWith([{
+            Bucket: "bucket",
+            Key: "key",
+            Body: Buffer.from("contents", "utf16le")
+        }])
+    })
+
+    test("The S3 client should be able to write UTF-8 data to a bucket", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // WHEN calling the writer function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.putStringContents("key", "contents")
+
+        // THEN the string contents are correctly written
+        expect(stringContents).toEqual({ success: true })
+
+        // AND the mock was called with correct arguments
+        expect(s3SenderMock).toHaveBeenCalledWith([{
+            Bucket: "bucket",
+            Key: "key",
+            Body: Buffer.from("contents", "utf8")
+        }])
+    })
+
+    test("The S3 client should return error if an exception is raised", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // AND the command throws an exception
+        s3SenderMock.mockRejectedValueOnce(new Error("Error"))
+
+        // WHEN calling the writer function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.putStringContents("key", "contents")
+
+        // THEN the string contents are correctly written
+        expect(stringContents).toEqual({ success: false, error: "Error" })
+    })
+
+    test("The S3 client should be able to delete data from a bucket", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // WHEN calling the writer function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.deleteObject("key")
+
+        // THEN the object is correctly deleted
+        expect(stringContents).toEqual({ success: true })
+
+        // AND the mock was called with correct arguments
+        expect(s3SenderMock).toHaveBeenCalledWith([{
+            Bucket: "bucket",
+            Key: "key",
+        }])
+    })
+
+    test("The S3 client should be able to throw an error when deleting data from a bucket", async () => {
+        // GIVEN the we have an S3 client configured
+        process.env.REGION = "dummy-region"
+        process.env.BUCKET_BUCKET_SECRET_ARN = "dummy-arn"
+        mockValues.actualSecretString = `{ "accessKeyId":"id", "secretAccessKey":"key"}`
+        initHandlers({ connectDatabase: false, buckets: ["bucket"] })
+
+        // AND a standard handler is connected and configured to use S3 client
+        let s3Buckets = undefined as any
+        connectedHandler = handlers.lambdaConnector(
+            dataApi.metadata.implementation.getData,
+            async (props: HandlerProps) => {
+                s3Buckets = props.buckets
+            },
+            {
+                buckets: ["bucket"],
+            }
+        )
+
+        // AND calling the connected handler
+        await connectedHandler({ body: "{}" })
+
+        // AND the command throws an exception
+        s3SenderMock.mockRejectedValueOnce(new Error("Error"))
+
+        // WHEN calling the writer function on the bucket
+        const configuredBucket = s3Buckets!["bucket"]
+        const stringContents = await configuredBucket.deleteObject("key")
+
+        // THEN the object is correctly deleted
+        expect(stringContents).toEqual({ success: false, error: "Error" })
     })
 })

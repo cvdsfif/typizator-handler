@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+S3 buckets write / delete support and access to credentials
 
 ## 4.5.1 - 2026-01-26
 Ability to return any status codes and headers in `directReturn` if needed.

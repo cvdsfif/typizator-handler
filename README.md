@@ -771,6 +771,27 @@ If you want to use AWS mail sending capacities in your lambdas, you can make the
 
 You can set the stack's `buckets` property to an array of bucket definitions, each of them containing the `bucketName` and `publicAccess` properties. The `publicAccess` property is a boolean that indicates if the bucket is public or not. This creates a client for each bucket and injects it to the `buckets` property of `HandlerProps` if the bucket's name is included in the `buckets` array property of the lambda.
 
+The bucket is accessible through the `buckets` property of `HandlerProps`.
+
+Example of use:
+
+```ts
+export const handler = async (props: HandlerProps) => {
+    const configuredBucket = props.buckets!["bucket"]
+    const result = await configuredBucket.deleteObject("key")
+    // Should return { success: true } or { success: false, error: string }
+    const writeResults = await configuredBucket.putStringContents("key", "contents")
+    // Should return { success: true } or { success: false, error: string }
+    const [error, contents] = await configuredBucket.getStringContents("key")
+    // Should either string contents in contents or error if there is an error
+    const accessKeyId = configuredBucket.accessKeyId
+    const secretAccessKey = configuredBucket.secretAccessKey
+    // Gets the effective bucket's access credentials
+    
+    // ...
+}
+```
+
 ### Direct JSON return
 
 If you want to return the result of the handler's implementation directly to the client without any additional processing, you can set the `directReturn` property to `true` in the `lambdaConnector` used to connect the lambda function.

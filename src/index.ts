@@ -8,7 +8,7 @@ import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
 import { Telegraf } from "telegraf"
 import ServerlessClient from "serverless-postgres";
 import { SESClient } from "@aws-sdk/client-ses";
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 export const PING = "@@ping";
 
@@ -156,8 +156,10 @@ export type SecretValue = {
     CreatedDate?: Date
 }
 
-const bucketAccessor = (s3Client: S3Client, bucketName: string) => {
+const bucketAccessor = (s3Client: S3Client, bucketName: string, accessKeyId: string, secretAccessKey: string) => {
     return ({
+        get accessKeyId() { return accessKeyId },
+        get secretAccessKey() { return secretAccessKey },
         getStringContents: async (key: string, encoding: string = "utf-8") => {
             try {
                 const command = new GetObjectCommand({
@@ -178,6 +180,35 @@ const bucketAccessor = (s3Client: S3Client, bucketName: string) => {
             } catch (e: any) {
                 console.error(`Error during file download from S3: ${e.message}`)
                 return [e.message, null]
+            }
+        },
+        putStringContents: async (key: string, contents: string, encoding: string = "utf-8") => {
+            try {
+                const normalizedEncoding = encoding === "unicode" ? "utf16le" : encoding
+                const command = new PutObjectCommand({
+                    Bucket: bucketName,
+                    Key: key,
+                    Body: Buffer.from(contents, normalizedEncoding as any),
+                })
+                await s3Client.send(command)
+
+                return { success: true }
+            } catch (e: any) {
+                console.error(`Error during file upload to S3: ${e.message}`)
+                return { success: false, error: e.message }
+            }
+        },
+        deleteObject: async (key: string) => {
+            try {
+                const command = new DeleteObjectCommand({
+                    Bucket: bucketName,
+                    Key: key
+                })
+                await s3Client.send(command)
+                return { success: true }
+            } catch (e: any) {
+                console.error(`Error during file deletion from S3: ${e.message}`)
+                return { success: false, error: e.message }
             }
         }
     })
@@ -542,7 +573,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                             secretAccessKey: secret.secretAccessKey,
                         },
                     }),
-                    bucketName
+                    bucketName,
+                    secret.accessKeyId,
+                    secret.secretAccessKey
                 )
             }
         }
