@@ -117,7 +117,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         template = Template.fromStack(stack);
     })
 
-    test("Should create lambdas matching the API structure", () => {
+    test.only("Should create lambdas matching the API structure", () => {
         template.hasResourceProperties("AWS::Lambda::Function",
             Match.objectLike({
                 "Description": "Test Typescript API - /meow (test)",

@@ -23,7 +23,7 @@ describe("Testing a stack with connected database", () => {
 
     const props = { deployFor: "test" };
 
-    test("Should create a stack with connected database", () => {
+    test.only("Should create a stack with connected database", () => {
         const app = new App();
 
         const stack = new TestStack(

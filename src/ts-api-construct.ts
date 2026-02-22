@@ -1219,8 +1219,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 userName: bucketUser.userName,
             })
 
-            const bucketUserSecret = new Secret(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user-secret`, {
-                secretName: `${props.deployFor}-bucket-user-secret`,
+            const bucketUserSecret = new Secret(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-ret`, {
+                secretName: `${props.deployFor}-${props.apiName}-${bucketName}-user-secret`,
                 generateSecretString: {
                     secretStringTemplate: JSON.stringify({
                         accessKeyId: accessKey.ref,
