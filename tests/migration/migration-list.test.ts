@@ -5,12 +5,12 @@ describe("Testing the events lists for migrations", () => {
         expect(migrationList().length).toEqual(0)
     })
 
-    test("List with three elements is correctly creates", () => {
+    test("List with three elements is correctly created", async () => {
         const threeMigrationsList = migrationList()
             .migration({
                 order: 1,
                 description: "D1",
-                query: "Q1"
+                callback: async () => "Q1"
             })
             .migration({
                 order: 2,
@@ -26,6 +26,7 @@ describe("Testing the events lists for migrations", () => {
         expect(threeMigrationsList[0].order).toEqual(1)
         expect(threeMigrationsList[1].description).toEqual("D2")
         expect(threeMigrationsList[2].query).toEqual("Q3")
+        expect(await threeMigrationsList[0].callback?.(null as any)).toEqual("Q1")
     })
 
     test("Zero or negative migration order numbers should be forbidden", () => {

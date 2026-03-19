@@ -602,13 +602,15 @@ const migrations = migrationList()
       .migration({
           order: 2,
           description: "Create second table",
-          query: "CREATE TABLE tab2(id INTEGER)"
+          callback: async (connection) => {
+              await connection.execute("CREATE TABLE tab2(id INTEGER)")
+          }
       })
 
 export const migration = postgresListMigrationHandler(migrations)
 ```
 
-This will create in your database two tables `tab1` and `tab2`. Then, if you want to add something more, simply add other `.migration` records to your list. Once the project deployed with CDK, don't change the existing migration steps, they become immutable, rather add new steps changing the results of the existing ones.
+This will create in your database two tables `tab1` and `tab2`. Then, if you want to add something more, simply add other `.migration` records to your list. Once the project deployed with CDK, don't change the existing migration steps, they become immutable (unless you explicitly allow mutations, but even in that case they will not have any effect on existing data), rather add new steps changing the results of the existing ones.
 
 ### Splitting stacks
 

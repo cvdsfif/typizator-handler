@@ -92,7 +92,7 @@ export class PostgresListMigrationProcessor implements MigrationProcessor {
                     `The migration list must be immutable. The successful migration number ${migration.creationOrder
                     } not found in your list. The original query was "${migration.queryExecuted
                     }, executed on ${migration.runTs}"`);
-            if (existingMigration.query !== migration.queryExecuted) {
+            if (!existingMigration.callback && existingMigration.query !== migration.queryExecuted) {
                 const errorMessage = `The migration list must be immutable. The successful migration number ${migration.creationOrder
                     } the query text modified. The original query was "${migration.queryExecuted
                     }, executed on ${migration.runTs}"`
@@ -108,15 +108,21 @@ export class PostgresListMigrationProcessor implements MigrationProcessor {
         let hasError = false
         let errorMessage = ""
         for (const migration of newMigrationsList) {
+            let queryExecuted = "-"
             try {
-                await db.query(migration.query)
+                if (migration.callback) {
+                    queryExecuted = await migration.callback(db)
+                } else if (migration.query) {
+                    await db.query(migration.query)
+                    queryExecuted = migration.query
+                }
                 await db.multiInsert(
                     databaseMigrationSchema,
                     this._migrationTableName,
                     [{
                         creationOrder: migration.order,
                         description: migration.description,
-                        queryExecuted: migration.query,
+                        queryExecuted,
                         successful: true,
                         message: ""
                     }],
@@ -134,7 +140,7 @@ export class PostgresListMigrationProcessor implements MigrationProcessor {
                     [{
                         creationOrder: migration.order,
                         description: migration.description,
-                        queryExecuted: migration.query,
+                        queryExecuted: migration.query ?? "-",
                         successful: false,
                         message: errorMessage
                     }],

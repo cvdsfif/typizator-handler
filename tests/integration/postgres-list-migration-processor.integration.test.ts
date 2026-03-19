@@ -21,7 +21,10 @@ describe("Testing the migration tool for Postgres using a forward-only migration
         .migration({
             order: 2,
             description: "M2",
-            query: "INSERT INTO test_table VALUES(1,'one')"
+            callback: async (db) => {
+                await db.query("INSERT INTO test_table VALUES(1,'one')")
+                return "INSERT INTO test_table VALUES(1,'one')"
+            }
         })
 
     beforeAll(async () => {
@@ -81,6 +84,31 @@ describe("Testing the migration tool for Postgres using a forward-only migration
                 `${underTest.migrationTableName} WHERE successful=false`)
             )[0].message
         ).toEqual(errorMessage)
+    })
+
+    test("Should report an error on callback exception", async () => {
+        const localMigration = new PostgresListMigrationProcessor(
+            migrationList()
+                .migration({
+                    order: 1,
+                    description: "M1",
+                    callback: async () => {
+                        throw new Error("Callback error");
+                    }
+                })
+        )
+        await localMigration.initialize(connection)
+        const result = await localMigration.migrate(connection)
+        expect(result.successful).toEqual(false)
+        const errorMessage = "syntax error at or near \"You\"";
+        if (!result.successful)
+            expect(result.errorMessage).toEqual("Callback error")
+        expect(
+            (await connection.select(
+                databaseMigrationSchema,
+                `${underTest.migrationTableName} WHERE successful=false`)
+            )[0].message
+        ).toEqual("Callback error")
     })
 
     test("Should continue after successful migration", async () => {

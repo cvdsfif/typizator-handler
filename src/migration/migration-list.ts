@@ -1,3 +1,5 @@
+import { DatabaseConnection } from "../database-connection"
+
 /**
  * Definition of a single migration step
  */
@@ -11,9 +13,13 @@ export type Migration = {
      */
     description: string
     /**
-     * Single SQL query to execute at the migration step
+     * Single SQL query to execute at the migration step.
      */
-    query: string
+    query?: string
+    /**
+     * Callback to execute instead of the query. If present, the query will be ignored and the result of the callback will be recorded as the query text in the log
+     */
+    callback?: (db: DatabaseConnection) => Promise<string>
 }
 
 /**
