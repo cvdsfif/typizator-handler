@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 4.8.2 - 2026-04-02
+
 ## 4.8.1 - 2026-04-02
 Allowed the bucket reader to list contents
 
