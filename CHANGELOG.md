@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+Allowed the bucket reader to list contents
 
 ## 4.8.0 - 2026-03-19
 TS callbacks for migration lists
