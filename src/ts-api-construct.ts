@@ -1196,7 +1196,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     new PolicyStatement({
                         effect: Effect.ALLOW,
                         actions: ['s3:GetObject'],
-                        resources: [`${bucket.bucketArn}/*`],
+                        resources: [bucket.arnForObjects("*")],
                         principals: [new AnyPrincipal()], // Allow public access
                     })
                 )
@@ -1210,8 +1210,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 new PolicyStatement({
                     effect: Effect.ALLOW,
                     actions: ['s3:PutObject', 's3:DeleteObject', 's3:GetObject', 's3:ListBucket'],
-                    resources: [`${bucket.bucketArn}/*`],
-                    principals: [bucketUser],
+                    resources: [bucket.arnForObjects("*")],
+                    principals: [bucketUser.grantPrincipal],
                 })
             )
 
