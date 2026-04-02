@@ -1213,12 +1213,20 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             bucket.addToResourcePolicy(
                 new PolicyStatement({
                     effect: Effect.ALLOW,
-                    actions: bucketProps?.needsListing === false ? ['s3:PutObject', 's3:DeleteObject', 's3:GetObject'] :
-                        ['s3:PutObject', 's3:DeleteObject', 's3:GetObject', 's3:ListBucket'],
+                    actions: ['s3:PutObject', 's3:DeleteObject', 's3:GetObject'],
                     resources: [bucket.arnForObjects("*")],
                     principals: [bucketUser.grantPrincipal],
                 })
             )
+
+            if (bucketProps?.needsListing !== false) {
+                bucket.addToResourcePolicy(new PolicyStatement({
+                    effect: Effect.ALLOW,
+                    actions: ['s3:ListBucket'],
+                    resources: [bucket.bucketArn],
+                    principals: [bucketUser.grantPrincipal],
+                }))
+            }
 
             const accessKey = new CfnAccessKey(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user-access-key`, {
                 userName: bucketUser.userName,
