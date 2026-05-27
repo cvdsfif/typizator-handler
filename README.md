@@ -596,6 +596,26 @@ export const report = handlerImpl(
 )
 ```
 
+#### Provisioned concurrency per lambda
+
+If you want to reduce cold starts for a specific endpoint, you can enable provisioned concurrency for the corresponding lambda.
+
+To do that, set `provisionedInstances` in the `lambdaPropertiesTree` for the concerned API function:
+
+```ts
+lambdaPropertiesTree: {
+    helloWorld: {
+        provisionedInstances: 2
+    }
+}
+```
+
+When `provisionedInstances` is set:
+
+- the construct creates a Lambda alias named `provisioned`
+- the alias is configured with provisioned concurrency equal to the given number
+- the HTTP API integration points to the alias (so traffic goes through the provisioned concurrency configuration)
+
 We will need the connection point to our API to use it from outside. It is very simple, remember the `CfnOutput` at the end of the example stack above? It will print the URL of your API at the end of your next CDK deployment. Just copy it and use it. It will not change after the next deployments.
 
 The construct automatically creates a layer in the `shared-layer` subdirectory of your `lambda` directory (you can change this via the construct's props). Put there all the stuff you need to share between all the API's lambdas, first of all the heavy-weight libraries that you don't need to bundle. Don't forget to list them in the `extraBundling.externalModules` property of your construct configuration, it's good to share things, but it's also good to let the compiler know about it...

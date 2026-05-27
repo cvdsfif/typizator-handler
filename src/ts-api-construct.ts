@@ -111,6 +111,12 @@ export type LambdaProperties = {
      */
     extraLayers?: LayerVersion[],
     /**
+     * If defined, creates an alias for the Lambda function and configures provisioned concurrency for that alias.
+     *
+     * When this is set, the HTTP API integration will point to the alias (not to `$LATEST`).
+     */
+    provisionedInstances?: number,
+    /**
      * Schedule on which to call the lambda
      */
     schedules?: [{
@@ -747,6 +753,15 @@ const createLambda = <R extends ApiDefinition>(
         `TSApiLambda-${camelCasePath}${props.deployFor}`,
         lambdaProperties
     )
+
+    let lambdaInvocationTarget: any = lambda
+    if (specificLambdaProperties?.provisionedInstances !== undefined) {
+        // NOTE: addAlias() automatically creates a Version and points the alias to it.
+        // A separate explicit Version object is not required.
+        lambdaInvocationTarget = lambda.addAlias("provisioned", {
+            provisionedConcurrentExecutions: specificLambdaProperties.provisionedInstances,
+        })
+    }
     if (insightsLayerPolicy)
         lambda.role?.addManagedPolicy(insightsLayerPolicy)
 
@@ -775,13 +790,13 @@ const createLambda = <R extends ApiDefinition>(
             const eventRule = new Rule(scope, `TSApiLambdaSchedule${idx}-${camelCasePath}${props.deployFor}`, {
                 schedule: Schedule.cron(schedule.cron)
             })
-            eventRule.addTarget(new LambdaFunction(lambda, {
+            eventRule.addTarget(new LambdaFunction(lambdaInvocationTarget, {
                 event: RuleTargetInput.fromObject({ body: schedule.eventBody ?? "{}" })
             }))
         })
     }
 
-    return lambda
+    return lambdaInvocationTarget
 }
 
 const connectLambda =

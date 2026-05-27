@@ -63,7 +63,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                             "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                            "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                         ]
                     },
                     lambdaPropertiesTree: {
@@ -288,7 +288,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                             "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                            "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                         ]
                     },
                     lambdaPropertiesTree: {
@@ -381,7 +381,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                         externalModules: [
                             "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                             "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                            "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                         ]
                     }
                 }
@@ -464,7 +464,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                         "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 },
                 serverlessCache: {
@@ -504,7 +504,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                         "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 },
                 serverlessCache: {
@@ -548,7 +548,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                         "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 },
             })
@@ -584,7 +584,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     externalModules: [
                         "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
                         "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
-                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
                     ]
                 },
             })
@@ -595,5 +595,53 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
 
         // THEN: two NAT gateways are created (natGateways overridden to 2), covering the vpcProps branch
         expect(Object.keys(vpcTemplate.findResources("AWS::EC2::NatGateway"))).toHaveLength(2)
+    })
+
+    test("Should create a provisioned alias when provisionedInstances is configured", () => {
+        // GIVEN: a stack with a lambda configured with provisioned instances
+        const app = new App()
+        const props = { deployFor: "test" }
+        const stack = new TestStack(
+            app, "TestedStackWithProvisionedConcurrency", props,
+            (stack: Stack) => {
+                return new TSApiConstruct(stack, "SimpleApi", {
+                    ...props,
+                    apiName: "TSTestApi",
+                    description: "Test Typescript API",
+                    apiMetadata: simpleApiS.metadata,
+                    lambdaPath: "tests/lambda",
+                    connectDatabase: false,
+                    corsConfiguration: "*",
+                    extraBundling: {
+                        minify: true,
+                        sourceMap: false,
+                        externalModules: [
+                            "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        ]
+                    },
+                    lambdaPropertiesTree: {
+                        meow: {
+                            provisionedInstances: 2,
+                        }
+                    }
+                })
+            }
+        )
+
+        // WHEN: the template is synthesized
+        const provisionedTemplate = Template.fromStack(stack)
+
+        // THEN: an alias with provisioned concurrency is created
+        provisionedTemplate.hasResourceProperties(
+            "AWS::Lambda::Alias",
+            Match.objectLike({
+                Name: "provisioned",
+                ProvisionedConcurrencyConfig: {
+                    ProvisionedConcurrentExecutions: 2,
+                },
+            })
+        )
     })
 })
