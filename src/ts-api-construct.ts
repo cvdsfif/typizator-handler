@@ -1,7 +1,7 @@
 import { CustomResource, Duration, RemovalPolicy, StackProps } from "aws-cdk-lib";
 import { CorsHttpMethod, CorsPreflightOptions, DomainName, HttpApi, HttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import { BastionHostLinux, ISecurityGroup, InstanceClass, InstanceSize, InstanceType, Peer, Port, SecurityGroup, SubnetType, Vpc, VpcProps } from "aws-cdk-lib/aws-ec2";
+import { BastionHostLinux, ISecurityGroup, IVpc, InstanceClass, InstanceSize, InstanceType, Peer, Port, SecurityGroup, SubnetType, Vpc, VpcProps } from "aws-cdk-lib/aws-ec2";
 import { Architecture, Code, Function, FunctionProps, ILayerVersion, InlineCode, LayerVersion, Runtime } from "aws-cdk-lib/aws-lambda";
 import { BundlingOptions, NodejsFunction, NodejsFunctionProps } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup, LogGroupProps, RetentionDays } from "aws-cdk-lib/aws-logs";
@@ -29,14 +29,23 @@ import { ARecord, HostedZone, IHostedZone, RecordTarget } from "aws-cdk-lib/aws-
 import { Certificate, CertificateValidation } from "aws-cdk-lib/aws-certificatemanager";
 import { ApiGatewayv2DomainProperties } from "aws-cdk-lib/aws-route53-targets";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
-import { AnyPrincipal, CfnAccessKey, Effect, IManagedPolicy, ManagedPolicy, PolicyStatement, User } from "aws-cdk-lib/aws-iam";
+import { AnyPrincipal, CfnAccessKey, Effect, IManagedPolicy, ManagedPolicy, PolicyStatement, User as IamUser } from "aws-cdk-lib/aws-iam";
 import { BlockPublicAccess, Bucket, HttpMethods } from "aws-cdk-lib/aws-s3";
+import * as elasticache from "aws-cdk-lib/aws-elasticache";
 
 const connectedTelegramWebhooks = new Set<string>()
 
 type BucketData = {
     secretArn: string,
     secret: Secret,
+}
+
+type ServerlessCacheData = {
+    secretArn: string,
+    secret: Secret,
+    username: string,
+    endpointAddress: string,
+    endpointPort: string,
 }
 
 /**
@@ -153,6 +162,13 @@ export type S3BucketProperties = {
 }
 
 /**
+ * Properties of a serverless cache created on the stack
+ */
+export type ServerlessCacheProperties = Partial<elasticache.CfnServerlessCacheProps> & {
+    serverlessCacheName: string,
+}
+
+/**
  * Properties defining how the stack is constructed from the `typizator` API definition
  */
 export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
@@ -263,6 +279,10 @@ export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
      * Optional map of S3 buckets to create on the stack
      */
     s3Buckets?: S3BucketProperties[],
+    /**
+     * Optional properties for the serverless cache to create
+     */
+    serverlessCache?: ServerlessCacheProperties,
 }
 
 /**
@@ -497,7 +517,7 @@ const addDatabaseProperties =
         }: {
             props: TsApiRdsProperties<R> | TsApiAuroraProperties<R> | InnerDependentApiProperties<R>,
             lambdaProps: NodejsFunctionProps,
-            vpc: Vpc,
+            vpc: IVpc,
             database: DatabaseInstance | DatabaseCluster,
             lambdaSG: ISecurityGroup,
             specificLambdaProperties?: NodejsFunctionProps,
@@ -619,7 +639,7 @@ const createTelegrafSetupLambda = <R extends ApiDefinition>(
 const createLambda = <R extends ApiDefinition>(
     {
         scope, props, subPath, sharedLayer, key, filePath, specificLambdaProperties, vpc,
-        database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy, bucketVars
+        database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy, bucketVars, serverlessCacheData
     }: {
         scope: Construct,
         props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -628,14 +648,15 @@ const createLambda = <R extends ApiDefinition>(
         key: string,
         filePath: string,
         specificLambdaProperties?: LambdaProperties,
-        vpc?: Vpc,
+        vpc?: IVpc,
         database?: DatabaseInstance | DatabaseCluster,
         databaseReadReplica?: DatabaseInstanceReadReplica,
         databaseSG?: ISecurityGroup,
         lambdaSG?: ISecurityGroup,
         insightsLayer?: ILayerVersion,
         insightsLayerPolicy?: IManagedPolicy,
-        bucketVars: Record<string, BucketData>
+        bucketVars: Record<string, BucketData>,
+        serverlessCacheData?: ServerlessCacheData
     }
 ) => {
     if (!specificLambdaProperties?.skipHandlerPreload) {
@@ -657,6 +678,10 @@ const createLambda = <R extends ApiDefinition>(
         const connectedTelegraf = connectedResourcesArray.includes(ConnectedResources.TELEGRAF.toString())
         if (!specificLambdaProperties?.telegrafSecret && connectedTelegraf)
             throw new Error(`Trying to connect telegraf to a lambda on a non-connected stack in ${filePath}`)
+
+        const connectedCache = connectedResourcesArray.includes(ConnectedResources.CACHE.toString())
+        if (!props.serverlessCache && connectedCache)
+            throw new Error(`Trying to connect cache to a lambda on a stack without serverless cache in ${filePath}`)
     }
 
 
@@ -700,6 +725,10 @@ const createLambda = <R extends ApiDefinition>(
             SECRETS_LIST: props.secrets?.map(secret => secret.secretArn).join(","),
             TELEGRAF_SECRET_ARN: specificLambdaProperties?.telegrafSecret?.secretArn,
             REGION: props.env?.region,
+            CACHE_SECRET_ARN: serverlessCacheData?.secretArn,
+            CACHE_USERNAME: serverlessCacheData?.username,
+            CACHE_ENDPOINT_ADDRESS: serverlessCacheData?.endpointAddress,
+            CACHE_ENDPOINT_PORT: serverlessCacheData?.endpointPort,
             ...Object.entries(bucketVars).reduce((acc, [key, value]: any) => ({ ...acc, [key]: value.secretArn }), {}),
         }
     } as NodejsFunctionProps
@@ -728,6 +757,7 @@ const createLambda = <R extends ApiDefinition>(
     }))
 
     Object.values(bucketVars).forEach(value => value.secret.grantRead(lambda))
+    serverlessCacheData?.secret.grantRead(lambda)
 
     props.firebaseAdminConnect?.secret.grantRead(lambda)
     props.secrets?.forEach(secret => secret.grantRead(lambda))
@@ -759,7 +789,7 @@ const connectLambda =
         {
             scope, props, subPath, httpApi, sharedLayer, key, keyKebabCase, specificLambdaProperties,
             vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy,
-            isHidden, bucketVars
+            isHidden, bucketVars, serverlessCacheData
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -769,7 +799,7 @@ const connectLambda =
             key: string,
             keyKebabCase: string,
             specificLambdaProperties: LambdaProperties,
-            vpc?: Vpc,
+            vpc?: IVpc,
             database?: DatabaseInstance | DatabaseCluster,
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
@@ -777,7 +807,8 @@ const connectLambda =
             insightsLayer?: ILayerVersion,
             insightsLayerPolicy?: IManagedPolicy,
             isHidden: boolean,
-            bucketVars: Record<string, BucketData>
+            bucketVars: Record<string, BucketData>,
+            serverlessCacheData?: ServerlessCacheData
         }
     ) => {
         const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -793,7 +824,8 @@ const connectLambda =
             database, databaseSG, lambdaSG,
             databaseReadReplica,
             insightsLayer, insightsLayerPolicy,
-            bucketVars
+            bucketVars,
+            serverlessCacheData
         })
 
         if (!isHidden) {
@@ -842,7 +874,7 @@ const createLambdasForApi =
     <R extends ApiDefinition>(
         {
             scope, props, subPath, apiMetadata, httpApi, sharedLayer, lambdaPropertiesTree,
-            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy, bucketVars
+            vpc, database, databaseReadReplica, databaseSG, lambdaSG, insightsLayer, insightsLayerPolicy, bucketVars, serverlessCacheData
         }: {
             scope: Construct,
             props: TsApiGenericProperties<R> | InnerDependentApiProperties<R>,
@@ -851,14 +883,15 @@ const createLambdasForApi =
             httpApi: HttpApi,
             sharedLayer: LayerVersion,
             lambdaPropertiesTree?: LambdaPropertiesTree<R>,
-            vpc?: Vpc,
+            vpc?: IVpc,
             database?: DatabaseInstance | DatabaseCluster,
             databaseReadReplica?: DatabaseInstanceReadReplica,
             databaseSG?: ISecurityGroup,
             lambdaSG?: ISecurityGroup,
             insightsLayer?: ILayerVersion,
             insightsLayerPolicy?: IManagedPolicy,
-            bucketVars: Record<string, BucketData>
+            bucketVars: Record<string, BucketData>,
+            serverlessCacheData?: ServerlessCacheData
         }
     ) => {
         const lambdas = {} as ApiLambdas<R>;
@@ -883,7 +916,8 @@ const createLambdasForApi =
                         vpc,
                         database, databaseSG, lambdaSG,
                         databaseReadReplica,
-                        insightsLayer, insightsLayerPolicy, bucketVars
+                        insightsLayer, insightsLayerPolicy, bucketVars,
+                        serverlessCacheData
                     }
                 )
             else
@@ -904,7 +938,8 @@ const createLambdasForApi =
                         database, databaseReadReplica, databaseSG, lambdaSG,
                         insightsLayer, insightsLayerPolicy,
                         isHidden: data.hidden,
-                        bucketVars
+                        bucketVars,
+                        serverlessCacheData
                     }
                 )
         }
@@ -931,11 +966,12 @@ type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> &
     dbProps: {
         databaseName: string
     },
-    vpc: Vpc,
+    vpc: IVpc,
     sharedLayer: LayerVersion,
     insightsLayer?: ILayerVersion,
     insightsLayerPolicy?: IManagedPolicy,
-    bucketVars: Record<string, BucketData>
+    bucketVars: Record<string, BucketData>,
+    serverlessCacheData?: ServerlessCacheData
 }
 
 const listLambdaArchitectures =
@@ -1045,7 +1081,8 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
             insightsLayer: props.parentConstruct.insightsLayer,
             insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy,
             corsConfiguration: props.corsConfiguration ?? props.parentConstruct.corsConfiguration,
-            bucketVars: props.parentConstruct.bucketVars
+            bucketVars: props.parentConstruct.bucketVars,
+            serverlessCacheData: props.parentConstruct.serverlessCacheData
         } as InnerDependentApiProperties<T>
         const apiInfo = createHttpApi(this, innerProps, kebabToCamel(innerProps.apiMetadata.path.replace("/", "-")))
         this.httpApi = apiInfo.api
@@ -1067,7 +1104,8 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
                 lambdaSG: innerProps.lambdaSG,
                 insightsLayer: innerProps.insightsLayer,
                 insightsLayerPolicy: innerProps.insightsLayerPolicy,
-                bucketVars: innerProps.bucketVars
+                bucketVars: innerProps.bucketVars,
+                serverlessCacheData: innerProps.serverlessCacheData
             }
         )
     }
@@ -1112,7 +1150,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
     /**
      * VPC created by the construct holding its resources
      */
-    readonly vpc?: Vpc
+    readonly vpc?: IVpc
     /**
      * Name of the database created
      */
@@ -1141,6 +1179,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
      * Bucket variables created by the construct
      */
     readonly bucketVars: Record<string, BucketData>
+    readonly serverlessCache?: elasticache.CfnServerlessCache
+    readonly serverlessCacheData?: ServerlessCacheData
 
     private readonly sharedLayer?: LayerVersion
 
@@ -1206,7 +1246,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 )
             }
 
-            const bucketUser = new User(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user`, {
+            const bucketUser = new IamUser(scope, `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user`, {
                 userName: `S3Bucket-${props.apiName}-${props.deployFor}-${bucketName}-bucket-user`,
             })
 
@@ -1250,15 +1290,86 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
         })
 
         this.auroraCluster = props.auroraCluster ?? false
-        if (props.connectDatabase) {
-            const vpc = this.vpc = new Vpc(this, `VPC-${props.apiName}-${props.deployFor}`, {
+        if (props.connectDatabase || props.serverlessCache) {
+            const extraVpcProps = ("vpcProps" in props && props.vpcProps) ? props.vpcProps : undefined
+            const vpc: IVpc = this.vpc = new Vpc(this, `VPC-${props.apiName}-${props.deployFor}`, {
                 natGateways: 1,
-                ...props.vpcProps
+                ...(extraVpcProps ?? {})
             })
-            this.databaseSG = new SecurityGroup(this, `SG-${props.apiName}-${props.deployFor}`, { vpc })
             this.lambdaSG = new SecurityGroup(scope, `TSApiLambdaSG-${props.apiName}-${props.deployFor}`, { vpc })
 
-            if (isAuroraCluster(props)) {
+            if (props.connectDatabase) {
+                this.databaseSG = new SecurityGroup(this, `SG-${props.apiName}-${props.deployFor}`, { vpc })
+            }
+
+            if (props.serverlessCache) {
+                const cacheProps = props.serverlessCache
+                const engine = cacheProps.engine ?? "valkey"
+                const majorEngineVersion = cacheProps.majorEngineVersion ?? "8"
+
+                const userName = `ServerlessCache-${props.apiName}-${props.deployFor}-user`
+                const userSecret = new Secret(this, `ServerlessCache-${props.apiName}-${props.deployFor}-userSecret`, {
+                    generateSecretString: {
+                        secretStringTemplate: JSON.stringify({ username: userName }),
+                        generateStringKey: "password",
+                        excludePunctuation: true,
+                        passwordLength: 16,
+                        requireEachIncludedType: true,
+                    },
+                })
+
+                const cacheUser = new elasticache.CfnUser(this, `ServerlessCache-${props.apiName}-${props.deployFor}-user`, {
+                    userId: userName,
+                    userName,
+                    engine,
+                    accessString: "on ~* +@all",
+                    authenticationMode: {
+                        type: "password",
+                        passwords: [userSecret.secretValueFromJson("password").toString()],
+                    },
+                })
+
+                const defaultUser = new elasticache.CfnUser(this, `ServerlessCache-${props.apiName}-${props.deployFor}-defaultUser`, {
+                    userId: `ServerlessCache-${props.apiName}-${props.deployFor}-default`,
+                    userName: "default",
+                    engine,
+                    accessString: "off -@all",
+                    authenticationMode: {
+                        type: "no-password-required",
+                    },
+                })
+
+                const userGroup = new elasticache.CfnUserGroup(this, `ServerlessCache-${props.apiName}-${props.deployFor}-userGroup`, {
+                    engine,
+                    userGroupId: `serverless-cache-${props.apiName}-${props.deployFor}`,
+                    userIds: [defaultUser.ref, cacheUser.ref],
+                })
+
+                const cacheSG = new SecurityGroup(this, `ServerlessCache-${props.apiName}-${props.deployFor}-sg`, { vpc })
+                const subnets = vpc.selectSubnets({ subnetType: SubnetType.PRIVATE_WITH_EGRESS })
+
+                this.serverlessCache = new elasticache.CfnServerlessCache(this, `ServerlessCache-${props.apiName}-${props.deployFor}`, {
+                    ...cacheProps,
+                    serverlessCacheName: cacheProps.serverlessCacheName,
+                    engine,
+                    majorEngineVersion,
+                    securityGroupIds: [cacheSG.securityGroupId],
+                    subnetIds: subnets.subnetIds,
+                    userGroupId: userGroup.ref,
+                })
+
+                this.serverlessCacheData = {
+                    secretArn: userSecret.secretArn,
+                    secret: userSecret,
+                    username: userName,
+                    endpointAddress: this.serverlessCache.attrEndpointAddress,
+                    endpointPort: this.serverlessCache.attrEndpointPort,
+                }
+
+                this.serverlessCache.node.addDependency(userGroup)
+            }
+
+            if (props.connectDatabase && isAuroraCluster(props)) {
                 const identifier = `DB-${props.apiName}-${props.deployFor}`
                 this.database = new DatabaseCluster(this, identifier, {
                     defaultDatabaseName: props.dbProps.databaseName,
@@ -1268,7 +1379,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     }),
                     vpc: this.vpc,
                     enableDataApi: true,
-                    securityGroups: [this.databaseSG],
+                    securityGroups: [this.databaseSG!],
                     credentials: Credentials.fromGeneratedSecret("postgres"),
                     writer: ClusterInstance.serverlessV2(`DBWriter-${props.apiName}-${props.deployFor}`),
                     readers: [ClusterInstance.serverlessV2(`DBReader-${props.apiName}-${props.deployFor}`, { scaleWithWriter: true }),],
@@ -1283,12 +1394,12 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     preferredMaintenanceWindow: "Sat:23:00-Sat:23:30",
                     ...props.dbProps
                 })
-            } else {
+            } else if (props.connectDatabase) {
                 this.database = new DatabaseInstance(this, `DB-${props.apiName}-${props.deployFor}`, {
                     engine: DatabaseInstanceEngine.postgres({ version: PostgresEngineVersion.VER_16 }),
                     instanceType: InstanceType.of(InstanceClass.T3, InstanceSize.MICRO),
                     vpc: this.vpc,
-                    securityGroups: [this.databaseSG],
+                    securityGroups: [this.databaseSG!],
                     credentials: Credentials.fromGeneratedSecret("postgres"),
                     allocatedStorage: 10,
                     maxAllocatedStorage: 50,
@@ -1305,9 +1416,11 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 }
             }
 
-            this.databaseName = props.dbProps.databaseName
+            if (props.connectDatabase) {
+                this.databaseName = props.dbProps.databaseName
+            }
 
-            if (props.migrationLambda) {
+            if (props.connectDatabase && props.migrationLambda) {
                 const keyKebabCase = camelToKebab(props.migrationLambda)
                 const subPath = props.migrationLambdaPath ?? "";
                 const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
@@ -1347,10 +1460,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     resourceType: "Custom::PostgresDatabaseMigration",
                     properties: { Checksum: checksum.toString() }
                 })
-                customResource.node.addDependency(this.database)
+                customResource.node.addDependency(this.database!)
             }
 
-            if (props.bastion) {
+            if (props.connectDatabase && props.bastion) {
                 this.bastion = new BastionHostLinux(
                     this,
                     `BastionHost-${props.apiName}-${props.deployFor}`, {
@@ -1359,8 +1472,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     subnetSelection: { subnetType: SubnetType.PUBLIC }
                 })
                 props.bastion.openTo.forEach(address => this.bastion?.allowSshAccessFrom(Peer.ipv4(address)))
-                this.database.connections.allowFrom(
-                    this.bastion.connections,
+                this.database!.connections.allowFrom(
+                    this.bastion!.connections,
                     props.auroraCluster ?
                         Port.tcp((this.database as DatabaseCluster).clusterEndpoint.port) :
                         Port.tcp((this.database as DatabaseInstance).instanceEndpoint.port),
@@ -1379,7 +1492,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
             vpc: this.vpc, database: this.database, databaseSG: this.databaseSG,
             lambdaSG: this.lambdaSG, databaseReadReplica: this.databaseReadReplica,
             insightsLayer: this.insightsLayer, insightsLayerPolicy: this.insightsLayerPolicy,
-            bucketVars
+            bucketVars,
+            serverlessCacheData: this.serverlessCacheData
         })
     }
 }

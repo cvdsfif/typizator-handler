@@ -7,6 +7,7 @@ import { ExtendedStackProps, TSApiConstruct } from "../src/ts-api-construct";
 import { Architecture, Runtime } from "aws-cdk-lib/aws-lambda";
 import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
+import { simpleApiWithCacheS } from "./lambda/shared/cache-api-definition";
 
 describe("Testing the behaviour of the Typescript API construct for CDK", () => {
     class TestStack<T extends ApiDefinition> extends Stack {
@@ -442,4 +443,157 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
             })
         )
     })
-});
+
+    test("Should create serverless cache with default engine/version", () => {
+        // GIVEN: a stack where serverless cache is enabled, but the user does not specify cache engine or engine version
+        const app = new App()
+        const props = { deployFor: "test" }
+        const stack = new TestStack(
+            app, "TestedStackWithCacheDefaults", props,
+            (stack: Stack) => new TSApiConstruct(stack, "SimpleApi", {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: simpleApiS.metadata,
+                lambdaPath: "tests/lambda",
+                corsConfiguration: "*",
+                connectDatabase: false,
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                },
+                serverlessCache: {
+                    serverlessCacheName: "test-cache",
+                }
+            })
+        )
+
+        // WHEN: the CDK stack is synthesized into a CloudFormation template
+        const cacheTemplate = Template.fromStack(stack)
+
+        // THEN: the ServerlessCache resource is created using the defaults (engine=valkey, majorEngineVersion=8)
+        cacheTemplate.hasResourceProperties("AWS::ElastiCache::ServerlessCache", {
+            ServerlessCacheName: "test-cache",
+            Engine: "valkey",
+            MajorEngineVersion: "8",
+        })
+    })
+
+    test("Should create serverless cache with overridden engine/version", () => {
+        // GIVEN: a stack where serverless cache is enabled and the user explicitly specifies cache engine and major engine version
+        const app = new App()
+        const props = { deployFor: "test" }
+        const stack = new TestStack(
+            app, "TestedStackWithCacheOverrides", props,
+            (stack: Stack) => new TSApiConstruct(stack, "SimpleApi", {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: simpleApiS.metadata,
+                lambdaPath: "tests/lambda",
+                corsConfiguration: "*",
+                connectDatabase: false,
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                },
+                serverlessCache: {
+                    serverlessCacheName: "test-cache",
+                    engine: "valkey",
+                    majorEngineVersion: "7",
+                }
+            })
+        )
+
+        // WHEN: the CDK stack is synthesized into a CloudFormation template
+        const cacheTemplate = Template.fromStack(stack)
+
+        // THEN: the ServerlessCache resource is created using the explicitly provided values (engine=valkey, majorEngineVersion=7)
+        cacheTemplate.hasResourceProperties("AWS::ElastiCache::ServerlessCache", {
+            ServerlessCacheName: "test-cache",
+            Engine: "valkey",
+            MajorEngineVersion: "7",
+        })
+    })
+
+    test("Should fail if cacheConnected lambda is used without enabling serverless cache", () => {
+        // GIVEN: an API with a lambda that declares it needs CACHE, while the stack does not enable serverlessCache
+        const app = new App()
+        const props = { deployFor: "test" }
+
+        // WHEN: creating the construct
+        const createStack = () => new TestStack(
+            app, "TestedStackCacheWithoutCache", props,
+            (stack: Stack) => new TSApiConstruct(stack, "SimpleApi", {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: simpleApiWithCacheS.metadata,
+                lambdaPath: "tests/lambda",
+                corsConfiguration: "*",
+                connectDatabase: false,
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                },
+            })
+        )
+
+        // THEN: the construct throws because serverlessCache is not configured, covering the cache validation branch (line 684)
+        expect(createStack).toThrow()
+    })
+
+    test("Should apply vpcProps when provided", () => {
+        // GIVEN: a database-connected stack where the user provides vpcProps overrides
+        const app = new App()
+        const props = { deployFor: "test" }
+        const stack = new TestStack(
+            app, "TestedStackWithVpcProps", props,
+            (stack: Stack) => new TSApiConstruct(stack, "SimpleApi", {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: simpleApiS.metadata,
+                lambdaPath: "tests/lambda",
+                corsConfiguration: "*",
+                connectDatabase: true,
+                vpcProps: {
+                    natGateways: 2,
+                },
+                dbProps: {
+                    databaseName: "db",
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                },
+            })
+        )
+
+        // WHEN: the CDK stack is synthesized into a CloudFormation template
+        const vpcTemplate = Template.fromStack(stack)
+
+        // THEN: two NAT gateways are created (natGateways overridden to 2), covering the vpcProps branch
+        expect(Object.keys(vpcTemplate.findResources("AWS::EC2::NatGateway"))).toHaveLength(2)
+    })
+})

@@ -7,6 +7,7 @@ import * as admin from 'firebase-admin'
 import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api"
 import { Telegraf } from "telegraf"
 import ServerlessClient from "serverless-postgres";
+import Valkey from "iovalkey";
 import { SESClient } from "@aws-sdk/client-ses";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
@@ -257,6 +258,10 @@ export type HandlerProps = {
      */
     buckets?: Record<string, BucketAccess>,
     /**
+     * If present, a Valkey connection object giving access to the Valkey cache
+     */
+    cache?: Valkey,
+    /**
      * If `true`, the lambda will return the result of the handler's implementation directly to the client without any additional processing
      */
     directReturn?: boolean,
@@ -294,7 +299,38 @@ export enum ConnectedResources {
     DATABASE = "DATABASE",
     FIREBASE_ADMIN = "FIREBASE_ADMIN",
     SECRETS = "SECRETS",
-    TELEGRAF = "TELEGRAF"
+    TELEGRAF = "TELEGRAF",
+    CACHE = "CACHE"
+}
+
+const connectServerlessCache = async () => {
+    const endpointAddress = process.env.CACHE_ENDPOINT_ADDRESS
+    const endpointPort = process.env.CACHE_ENDPOINT_PORT
+    const cacheSecretArn = process.env.CACHE_SECRET_ARN
+
+    if (!endpointAddress || !endpointPort || !cacheSecretArn)
+        throw new Error("Cache access not configured, the process environment must contain CACHE_ENDPOINT_ADDRESS,CACHE_ENDPOINT_PORT and CACHE_SECRET_ARN")
+
+    const secretString =
+        (await new SecretsManager()
+            .getSecretValue({ SecretId: cacheSecretArn }))
+            .SecretString
+    if (!secretString)
+        throw new Error("Cache password not available on AWS secrets")
+
+    const { username, password } = JSON.parse(secretString)
+    if (!password)
+        throw new Error("Cache password not found in secret")
+
+    const client = new Valkey({
+        host: endpointAddress,
+        port: Number(endpointPort),
+        username,
+        password,
+        tls: {},
+    })
+
+    return client
 }
 
 const loadSecrets = async () => {
@@ -471,6 +507,10 @@ export type ConnectorProperties = {
      */
     buckets?: string[],
     /**
+     * If `true`, the underlying lambda receives in props parameter an interface allowing to access a Valkey cache
+     */
+    cacheConnected?: boolean,
+    /**
      * If `true`, the lambda will return the result of the handler's implementation directly to the client without any additional processing
      */
     directReturn?: boolean,
@@ -489,6 +529,9 @@ const fillConnectedResourcesProperties = (props: ConnectorProperties, fn: any) =
     }
     if (props.telegraf) {
         connectedResources.push(ConnectedResources.TELEGRAF)
+    }
+    if (props.cacheConnected) {
+        connectedResources.push(ConnectedResources.CACHE)
     }
     fn.connectedResources = connectedResources
 }
@@ -537,6 +580,9 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
         if (connectorProps.databaseConnected) {
             const client = await connectPostgresDb(connectorProps)
             handlerProps.db = connectDatabase(client)
+        }
+        if (connectorProps.cacheConnected) {
+            handlerProps.cache = await connectServerlessCache()
         }
         if (connectorProps.firebaseAdminConnected) {
             handlerProps.firebaseAdmin = await createFirebaseAdminConnection()
@@ -597,6 +643,14 @@ export const lambdaConnector = <T extends FunctionCallDefinition>(
                 await props.db?.client.clean()
             } catch (e) {
                 console.warn("Error cleaning database connection", e)
+            }
+        }
+        if (connectorProps.cacheConnected) {
+            try {
+                const props = await propsSource()
+                props.cache?.quit()
+            } catch (e) {
+                console.warn("Error cleaning cache connection", e)
             }
         }
         process.exit(0)

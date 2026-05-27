@@ -263,6 +263,76 @@ export const proceed = lambdaConnector(
 
 Note that you don't have to call the `handleUpdate` function at the end of your handler, it's done automatically by the framework.
 
+### Serverless cache (Valkey) connector
+
+If your application needs a connection to a serverless Valkey cache (AWS ElastiCache Serverless Cache), you can request it to be injected into your handler by setting `cacheConnected: true` in the connector properties:
+
+```ts
+lambdaConnector(
+    api.metadata.implementation.helloWorld,
+    helloWorldImpl,
+    {
+        cacheConnected: true
+    }
+)
+```
+
+In that case, `HandlerProps` will contain the `cache` field which is a Valkey client instance.
+
+To make the connection possible, the following environment variables must be defined for your lambda:
+
+- `CACHE_ENDPOINT_ADDRESS`
+- `CACHE_ENDPOINT_PORT`
+- `CACHE_SECRET_ARN`
+
+The secret referenced by `CACHE_SECRET_ARN` must contain a JSON payload with the fields:
+
+- `username`
+- `password`
+
+If you use the `TSApiConstruct`, these variables and the secret permissions are configured automatically when you enable `serverlessCache` on the stack.
+
+### S3 buckets access injection
+
+If your handler needs to read/write objects in one or more S3 buckets, you can request bucket access objects to be injected via the connector properties:
+
+```ts
+lambdaConnector(
+    api.metadata.implementation.helloWorld,
+    helloWorldImpl,
+    {
+        buckets: ["my-bucket", "another.bucket"]
+    }
+)
+```
+
+When enabled, `HandlerProps.buckets` becomes a dictionary keyed by bucket name. Each entry exposes:
+
+- `getStringContents(key, encoding?)`
+- `putStringContents(key, contents, encoding?)`
+- `deleteObject(key)`
+
+The connector expects, for each bucket name, an environment variable containing the ARN of an AWS secret with S3 credentials:
+
+- `BUCKET_<BUCKET_NAME>_SECRET_ARN`
+
+Where `<BUCKET_NAME>` is uppercased and normalized as follows:
+
+- `-` becomes `__`
+- `.` becomes `_`
+
+For example:
+
+- `my-bucket` -> `BUCKET_MY__BUCKET_SECRET_ARN`
+- `another.bucket` -> `BUCKET_ANOTHER_BUCKET_SECRET_ARN`
+
+The referenced secret must contain JSON fields:
+
+- `accessKeyId`
+- `secretAccessKey`
+
+If you use `TSApiConstruct` and configure `s3Buckets`, it creates the buckets, creates per-bucket IAM users + access keys, stores them into secrets, injects the corresponding `BUCKET_..._SECRET_ARN` variables into lambdas, and grants those lambdas read access to the secrets.
+
 ### AWS secrets injection
 
 If your application needs to use values stored in AWS secrets available for your account, you can specify it in your Lambda connector:
