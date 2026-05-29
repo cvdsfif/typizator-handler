@@ -18,12 +18,12 @@ esbuild.buildSync({
     ...commonConfig,
     format: "cjs",
     outdir: "./dist",
-    entryNames: "[name].cjs.js"
+    entryNames: "[name].cjs"
 });
 
 esbuild.buildSync({
     ...commonConfig,
     format: "esm",
     outdir: "./dist",
-    entryNames: "[name].esm.js"
+    entryNames: "[name].esm"
 });
