@@ -35,6 +35,8 @@
   },
   "scripts": {
     "build": "rm -rf dist && node build.js && tsc --emitDeclarationOnly",
+    "prepare": "npm run build",
+    "prepack": "npm run build",
     "test": "./test.sh"
   },
   "repository": {
