@@ -24,5 +24,6 @@ esbuild.buildSync({
 esbuild.buildSync({
     ...commonConfig,
     format: "esm",
-    outfile: "./dist/index.esm.js"
+    outdir: "./dist",
+    entryNames: "[name].esm"
 });
