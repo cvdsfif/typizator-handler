@@ -8,7 +8,9 @@ describe("Testing the database type handling tools", () => {
     let connection: DatabaseConnection;
 
     beforeAll(async () => {
-        const container = await new PostgreSqlContainer().withReuse().start();
+        const container = await new PostgreSqlContainer(
+            process.env.TESTCONTAINERS_POSTGRES_IMAGE ?? "postgres:16-alpine"
+        ).withReuse().start();
         const client = new ServerlessClient({ connectionString: container.getConnectionUri() });
         await client.connect();
         connection = connectDatabase(client);

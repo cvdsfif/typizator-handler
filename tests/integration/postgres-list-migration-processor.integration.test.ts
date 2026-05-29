@@ -28,7 +28,9 @@ describe("Testing the migration tool for Postgres using a forward-only migration
         })
 
     beforeAll(async () => {
-        const container = await new PostgreSqlContainer().withReuse().start()
+        const container = await new PostgreSqlContainer(
+            process.env.TESTCONTAINERS_POSTGRES_IMAGE ?? "postgres:16-alpine"
+        ).withReuse().start()
         const client = new ServerlessClient({ connectionString: container.getConnectionUri() })
         client.connect()
         connection = connectDatabase(client);

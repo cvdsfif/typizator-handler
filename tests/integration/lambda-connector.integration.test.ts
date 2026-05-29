@@ -114,7 +114,9 @@ describe("Test interfaces behaviour on a real database", () => {
             Telegraf: telegrafMock
         }))
 
-        const container = await new PostgreSqlContainer().withReuse().start()
+        const container = await new PostgreSqlContainer(
+            process.env.TESTCONTAINERS_POSTGRES_IMAGE ?? "postgres:16-alpine"
+        ).withReuse().start()
         testClient = new ServerlessClient({ connectionString: container.getConnectionUri() })
 
         jest.mock("firebase-admin", () => ({
