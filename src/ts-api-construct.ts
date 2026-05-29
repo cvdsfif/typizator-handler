@@ -758,9 +758,12 @@ const createLambda = <R extends ApiDefinition>(
     if (specificLambdaProperties?.provisionedInstances !== undefined) {
         // NOTE: addAlias() automatically creates a Version and points the alias to it.
         // A separate explicit Version object is not required.
-        lambdaInvocationTarget = lambda.addAlias("provisioned", {
-            provisionedConcurrentExecutions: specificLambdaProperties.provisionedInstances,
+        const alias = lambda.addAlias("provisioned")
+        alias.addAutoScaling({
+            minCapacity: specificLambdaProperties.provisionedInstances,
+            maxCapacity: specificLambdaProperties.provisionedInstances,
         })
+        lambdaInvocationTarget = alias
     }
     if (insightsLayerPolicy)
         lambda.role?.addManagedPolicy(insightsLayerPolicy)

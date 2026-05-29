@@ -633,14 +633,19 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         // WHEN: the template is synthesized
         const provisionedTemplate = Template.fromStack(stack)
 
-        // THEN: an alias with provisioned concurrency is created
+        // THEN: an alias is created and autoscaling is configured for provisioned concurrency (fixed min=max)
         provisionedTemplate.hasResourceProperties(
             "AWS::Lambda::Alias",
             Match.objectLike({
                 Name: "provisioned",
-                ProvisionedConcurrencyConfig: {
-                    ProvisionedConcurrentExecutions: 2,
-                },
+            })
+        )
+
+        provisionedTemplate.hasResourceProperties(
+            "AWS::ApplicationAutoScaling::ScalableTarget",
+            Match.objectLike({
+                MinCapacity: 2,
+                MaxCapacity: 2,
             })
         )
     })
