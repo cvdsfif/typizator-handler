@@ -9,12 +9,21 @@
     ".": {
       "types": "./dist/index.d.ts",
       "require": "./dist/index.cjs.js",
-      "import": "./dist/index.esm.js"
+      "import": "./dist/index.esm.js",
+      "default": "./dist/index.esm.js"
     },
     "./cdk": {
       "types": "./dist/cdk.d.ts",
       "require": "./dist/cdk.cjs.js",
-      "import": "./dist/cdk.esm.js"
+      "import": "./dist/cdk.esm.js",
+      "default": "./dist/cdk.esm.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "cdk": [
+        "dist/cdk.d.ts"
+      ]
     }
   },
   "files": [
