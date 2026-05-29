@@ -18,7 +18,7 @@ esbuild.buildSync({
     ...commonConfig,
     format: "cjs",
     outdir: "./dist",
-    entryNames: "[name].cjs"
+    entryNames: "[name].cjs.js"
 });
 
 esbuild.buildSync({

@@ -5,6 +5,18 @@
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs.js",
+      "import": "./dist/index.esm.js"
+    },
+    "./cdk": {
+      "types": "./dist/cdk.d.ts",
+      "require": "./dist/cdk.cjs.js",
+      "import": "./dist/cdk.esm.js"
+    }
+  },
   "files": [
     "dist"
   ],
