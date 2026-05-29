@@ -2,7 +2,10 @@ const esbuild = require("esbuild");
 const { dependencies } = require("./package.json");
 
 const commonConfig = {
-    entryPoints: ["./src/index.ts"],
+    entryPoints: {
+        index: "./src/index.ts",
+        cdk: "./src/cdk.ts",
+    },
     target: ["esnext", "node20"],
     bundle: true,
     minify: true,
@@ -14,7 +17,8 @@ const commonConfig = {
 esbuild.buildSync({
     ...commonConfig,
     format: "cjs",
-    outfile: "./dist/index.cjs.js"
+    outdir: "./dist",
+    entryNames: "[name].cjs"
 });
 
 esbuild.buildSync({
