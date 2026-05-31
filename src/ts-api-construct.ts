@@ -1343,7 +1343,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     accessString: "on ~* +@all",
                     authenticationMode: {
                         type: "password",
-                        passwords: [userSecret.secretValueFromJson("password").toString()],
+                        passwords: [userSecret.secretValueFromJson("password").unsafeUnwrap()],
                     },
                 })
 
