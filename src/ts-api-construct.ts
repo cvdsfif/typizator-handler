@@ -1342,8 +1342,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     engine,
                     accessString: "on ~* +@all",
                     authenticationMode: {
-                        type: "password",
-                        passwords: [userSecret.secretValueFromJson("password").unsafeUnwrap()],
+                        Type: "password",
+                        Passwords: [userSecret.secretValueFromJson("password").unsafeUnwrap()],
                     },
                 })
 
@@ -1353,7 +1353,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     engine,
                     accessString: "off -@all",
                     authenticationMode: {
-                        type: "no-password-required",
+                        Type: "no-password-required",
                     },
                 })
 
