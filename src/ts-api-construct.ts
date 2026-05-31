@@ -748,6 +748,17 @@ const createLambda = <R extends ApiDefinition>(
         }
     } as NodejsFunctionProps
 
+    if (serverlessCacheData && !props.connectDatabase) {
+        lambdaProperties = {
+            ...lambdaProperties,
+            vpc: vpc!,
+            securityGroups: [lambdaSG!],
+            vpcSubnets: {
+                subnetType: SubnetType.PRIVATE_WITH_EGRESS,
+            },
+        }
+    }
+
     if (props.connectDatabase)
         lambdaProperties = addDatabaseProperties({
             props: props as any,
@@ -1365,6 +1376,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 })
 
                 const cacheSG = new SecurityGroup(this, `ServerlessCache-${props.apiName}-${props.deployFor}-sg`, { vpc })
+                cacheSG.addIngressRule(this.lambdaSG!, Port.tcp(6379), `Lambda2Cache-${props.apiName}-${props.deployFor}`)
                 const subnets = vpc.selectSubnets({ subnetType: SubnetType.PRIVATE_WITH_EGRESS })
 
                 this.serverlessCache = new elasticache.CfnServerlessCache(this, `ServerlessCache-${props.apiName}-${props.deployFor}`, {
