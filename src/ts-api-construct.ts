@@ -1357,22 +1357,11 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     },
                 })
 
-                const defaultUserId = normalizeElastiCacheId(`serverless-cache-${props.apiName}-${props.deployFor}-default`)
-                const defaultUser = new elasticache.CfnUser(this, `ServerlessCache-${props.apiName}-${props.deployFor}-defaultUser`, {
-                    userId: defaultUserId,
-                    userName: "default",
-                    engine,
-                    accessString: "off -@all",
-                    authenticationMode: {
-                        Type: "no-password-required",
-                    },
-                })
-
                 const userGroupId = normalizeElastiCacheId(`serverless-cache-${props.apiName}-${props.deployFor}`)
                 const userGroup = new elasticache.CfnUserGroup(this, `ServerlessCache-${props.apiName}-${props.deployFor}-userGroup`, {
                     engine,
                     userGroupId,
-                    userIds: [defaultUser.ref, cacheUser.ref],
+                    userIds: [cacheUser.ref],
                 })
 
                 const cacheSG = new SecurityGroup(this, `ServerlessCache-${props.apiName}-${props.deployFor}-sg`, { vpc })
