@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 Serverless cache security improved
 
+## 5.0.4 - 2026-05-29
+
 ## 5.0.3 - 2026-05-29
 CDK-related stuff is now in a separate export. Import it like this:
 ```ts
