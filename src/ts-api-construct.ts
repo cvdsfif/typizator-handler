@@ -174,6 +174,15 @@ export type ServerlessCacheProperties = Partial<elasticache.CfnServerlessCachePr
     serverlessCacheName: string,
 }
 
+const normalizeElastiCacheId = (value: string) => {
+    const lowered = value.toLowerCase()
+    const replaced = lowered.replace(/[^a-z0-9-]/g, "-")
+    const collapsed = replaced.replace(/-+/g, "-")
+    const trimmed = collapsed.replace(/^-+/, "").replace(/-+$/, "")
+    const prefixed = /^[a-z]/.test(trimmed) ? trimmed : `u-${trimmed || "u"}`
+    return prefixed.replace(/-+$/, "")
+}
+
 /**
  * Properties defining how the stack is constructed from the `typizator` API definition
  */
@@ -1325,7 +1334,8 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 const engine = cacheProps.engine ?? "valkey"
                 const majorEngineVersion = cacheProps.majorEngineVersion ?? "8"
 
-                const userName = `ServerlessCache-${props.apiName}-${props.deployFor}-user`
+                const userId = normalizeElastiCacheId(`serverless-cache-${props.apiName}-${props.deployFor}-user`)
+                const userName = userId
                 const userSecret = new Secret(this, `ServerlessCache-${props.apiName}-${props.deployFor}-userSecret`, {
                     generateSecretString: {
                         secretStringTemplate: JSON.stringify({ username: userName }),
@@ -1337,7 +1347,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 })
 
                 const cacheUser = new elasticache.CfnUser(this, `ServerlessCache-${props.apiName}-${props.deployFor}-user`, {
-                    userId: userName,
+                    userId,
                     userName,
                     engine,
                     accessString: "on ~* +@all",
@@ -1347,8 +1357,9 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     },
                 })
 
+                const defaultUserId = normalizeElastiCacheId(`serverless-cache-${props.apiName}-${props.deployFor}-default`)
                 const defaultUser = new elasticache.CfnUser(this, `ServerlessCache-${props.apiName}-${props.deployFor}-defaultUser`, {
-                    userId: `ServerlessCache-${props.apiName}-${props.deployFor}-default`,
+                    userId: defaultUserId,
                     userName: "default",
                     engine,
                     accessString: "off -@all",
@@ -1357,9 +1368,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     },
                 })
 
+                const userGroupId = normalizeElastiCacheId(`serverless-cache-${props.apiName}-${props.deployFor}`)
                 const userGroup = new elasticache.CfnUserGroup(this, `ServerlessCache-${props.apiName}-${props.deployFor}-userGroup`, {
                     engine,
-                    userGroupId: `serverless-cache-${props.apiName}-${props.deployFor}`,
+                    userGroupId,
                     userIds: [defaultUser.ref, cacheUser.ref],
                 })
 
