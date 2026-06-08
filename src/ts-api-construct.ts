@@ -174,7 +174,7 @@ export type ServerlessCacheProperties = Partial<elasticache.CfnServerlessCachePr
     serverlessCacheName: string,
 }
 
-const normalizeElastiCacheId = (value: string) => {
+export const normalizeElastiCacheId = (value: string) => {
     const lowered = value.toLowerCase()
     const replaced = lowered.replace(/[^a-z0-9-]/g, "-")
     const collapsed = replaced.replace(/-+/g, "-")
@@ -695,7 +695,7 @@ const createLambda = <R extends ApiDefinition>(
             throw new Error(`Trying to connect telegraf to a lambda on a non-connected stack in ${filePath}`)
 
         const connectedCache = connectedResourcesArray.includes(ConnectedResources.CACHE.toString())
-        if (!props.serverlessCache && connectedCache)
+        if (!props.serverlessCache && !serverlessCacheData && connectedCache)
             throw new Error(`Trying to connect cache to a lambda on a stack without serverless cache in ${filePath}`)
     }
 
