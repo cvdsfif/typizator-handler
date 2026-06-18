@@ -702,6 +702,45 @@ export const migration = postgresListMigrationHandler(migrations)
 
 This will create in your database two tables `tab1` and `tab2`. Then, if you want to add something more, simply add other `.migration` records to your list. Once the project deployed with CDK, don't change the existing migration steps, they become immutable (unless you explicitly allow mutations, but even in that case they will not have any effect on existing data), rather add new steps changing the results of the existing ones.
 
+### Once-per-deployment setup handler
+
+Sometimes you need to run a piece of code on every deployment that is not a schema migration (for example, to create reference data, rebuild cache entries, or perform one-time initialization logic).
+
+For that, you can define a setup lambda using the `setupLambda` property on a connected stack:
+
+```ts
+connectDatabase: true,
+setupLambda: "setup",
+```
+
+This creates a CloudFormation custom resource of type `Custom::GeneralDataSetup` and executes it during deployment.
+
+The custom resource is automatically re-run when the Typescript source file of the handler changes (the construct computes and stores a checksum of the handler file).
+
+#### Implementing the setup handler
+
+The setup handler must be exported from the corresponding lambda file (for the example above: `lambda/setup.ts`).
+
+You can implement it using the prebuilt `setupHandler()` helper from this library (similar to the migration handler):
+
+```ts
+import Valkey from "iovalkey"
+import { DatabaseConnection } from "typizator-handler"
+import { setupHandler } from "typizator-handler"
+
+export const setup = setupHandler({
+    setup: async (db: DatabaseConnection, cache: Valkey) => {
+        return { successful: true, lastSuccessful: 1 }
+    }
+})
+```
+
+#### Accessing the serverless cache from the setup handler
+
+If you enable `serverlessCache` on the stack and declare `ConnectedResources.CACHE` on the setup handler, the construct injects the cache access environment variables and grants permissions to read the cache credentials secret.
+
+At runtime, you can use `connectServerlessCache()` to create a Valkey client from the injected configuration.
+
 ### Splitting stacks
 
 With a relatively big API, you'll hit sooner or later the AWS Cloudformation's limit of 500 deployed resources per stack. For that case, the library offers a possibility to split your API into several sub-APIs, each one deployed through its own stack and using its own HTTP API entry point.
@@ -741,6 +780,24 @@ const childConstruct = new DependentApiConstruct(this, "ChildApi", {
     lambdaPath: "lambda", // You can change this for another directory if you want
     // Your parent construct must be inside its own stack in inherit the information on its components, including the database connection
     parentConstruct: parentStack.construct
+})
+```
+
+#### Exceptionally not inheriting the parent serverless cache
+
+By default, a dependent stack inherits the serverless cache connection data from the parent construct (if the parent stack enabled `serverlessCache`).
+
+If you want a specific dependent stack to not receive the cache connection environment variables and permissions, set `inheritServerlessCache: false`:
+
+```ts
+const childConstruct = new DependentApiConstruct(this, "ChildApi", {
+    ...otherOptionalProps,
+    apiName: "TSDependentTestApi",
+    description: "Dependent typescript API",
+    apiMetadata: api.metadata.implementation.subGroup,
+    lambdaPath: "lambda",
+    parentConstruct: parentStack.construct,
+    inheritServerlessCache: false,
 })
 ```
 

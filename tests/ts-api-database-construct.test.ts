@@ -133,6 +133,103 @@ describe("Testing a stack with connected database", () => {
         expect(customResource[resourceKeys[0]].Properties.Checksum.length).toBeGreaterThan(0)
     })
 
+    test("Should connect the setup custom resource", () => {
+        const app = new App()
+
+        const stack = new TestStack(
+            app, "TestedStack", props,
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: connectedApi.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: true,
+                setupLambda: "setup",
+                dbProps: {
+                    databaseName: "TestDatabase"
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                }
+            }
+        )
+        const template = Template.fromStack(stack)
+
+        const customResource = template.findResources("Custom::GeneralDataSetup", Match.anyValue())
+        const resourceKeys = Object.keys(customResource)
+        expect(resourceKeys.length).toEqual(1)
+        expect(customResource[resourceKeys[0]].Properties.Checksum.length).toBeGreaterThan(0)
+    })
+
+    test("Should fail if the setup lambda is not found", async () => {
+        const app = new App()
+
+        await expect(
+            async () => new TestStack(
+                app, "TestedStack", props,
+                {
+                    ...props,
+                    apiName: "TSTestApi",
+                    description: "Test Typescript API",
+                    apiMetadata: connectedApi.metadata,
+                    lambdaPath: "tests/lambda",
+                    connectDatabase: true,
+                    setupLambda: "notFound",
+                    dbProps: {
+                        databaseName: "TestDatabase"
+                    },
+                    extraBundling: {
+                        minify: true,
+                        sourceMap: false,
+                        externalModules: [
+                            "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        ]
+                    }
+                }
+            )
+        ).rejects.toContainAllStrings("Handler not found")
+    })
+
+    test("Should fail if the setup lambda is not a setup handler", async () => {
+        const app = new App()
+
+        await expect(
+            async () => new TestStack(
+                app, "TestedStack", props,
+                {
+                    ...props,
+                    apiName: "TSTestApi",
+                    description: "Test Typescript API",
+                    apiMetadata: connectedApi.metadata,
+                    lambdaPath: "tests/lambda",
+                    connectDatabase: true,
+                    setupLambda: "wrongSetup",
+                    dbProps: {
+                        databaseName: "TestDatabase"
+                    },
+                    extraBundling: {
+                        minify: true,
+                        sourceMap: false,
+                        externalModules: [
+                            "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        ]
+                    }
+                }
+            )
+        ).rejects.toContainAllStrings("No appropriate setup handler connected")
+    })
+
     test("Different migration handlers should have different checksums", () => {
         const app = new App()
         const stack = new TestStack(

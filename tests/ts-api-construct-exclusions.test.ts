@@ -46,6 +46,74 @@ describe("Testing partial exclusions on the API", () => {
         "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
     ]
 
+    const initWithCache = () => {
+        const app = new App()
+        const props = { deployFor: "test" }
+        const innerStack = new TestStack(
+            app, "TestedStackWithCache", props,
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: simpleApiS.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: true,
+                serverlessCache: {
+                    serverlessCacheName: "test-cache"
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
+                dbProps: {
+                    databaseName: "TestDB"
+                },
+                apiExclusions: [
+                    simpleApiS.metadata.implementation.cruel.metadata.path,
+                    simpleApiS.metadata.implementation.noMeow.metadata.path
+                ]
+            }
+        )
+
+        stack = innerStack
+
+        dependentStack = new ConnectedStack(
+            app, "DependentStackWithCache", props,
+            {
+                ...props,
+                apiName: "TSDependentTestApi",
+                description: "Dependent typescript API",
+                apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
+                lambdaPath: "tests/lambda",
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
+                parentConstruct: innerStack.construct,
+            }
+        )
+
+        dependentStackWithoutCors = new ConnectedStack(
+            app, "DependentStackWithCacheNoInheritance", props,
+            {
+                ...props,
+                apiName: "TSDependentTestApi",
+                description: "Dependent typescript API",
+                apiMetadata: simpleApiS.metadata.implementation.cruel.metadata,
+                lambdaPath: "tests/lambda",
+                inheritServerlessCache: false,
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules
+                },
+                parentConstruct: innerStack.construct,
+            }
+        )
+    }
+
     const init = () => {
         const app = new App()
         const props = { deployFor: "test" };
@@ -217,6 +285,41 @@ describe("Testing partial exclusions on the API", () => {
             Match.not(
                 Match.objectLike({
                     "Description": Match.stringLikeRegexp("noMeow")
+                })
+            )
+        )
+    })
+
+    test("Dependent stack should inherit cache env vars by default", () => {
+        initWithCache()
+        const dependentTemplate = Template.fromStack(dependentStack)
+        dependentTemplate.hasResourceProperties(
+            "AWS::Lambda::Function",
+            Match.objectLike({
+                Environment: {
+                    Variables: Match.objectLike({
+                        CACHE_SECRET_ARN: Match.anyValue(),
+                        CACHE_ENDPOINT_ADDRESS: Match.anyValue(),
+                        CACHE_ENDPOINT_PORT: Match.anyValue(),
+                        CACHE_USERNAME: Match.anyValue(),
+                    })
+                }
+            })
+        )
+    })
+
+    test("Dependent stack should not inherit cache env vars when inheritServerlessCache is false", () => {
+        initWithCache()
+        const dependentTemplate = Template.fromStack(dependentStackWithoutCors)
+        dependentTemplate.allResourcesProperties(
+            "AWS::Lambda::Function",
+            Match.not(
+                Match.objectLike({
+                    Environment: {
+                        Variables: Match.objectLike({
+                            CACHE_SECRET_ARN: Match.anyValue(),
+                        })
+                    }
                 })
             )
         )

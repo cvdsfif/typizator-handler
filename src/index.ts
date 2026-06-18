@@ -303,7 +303,7 @@ export enum ConnectedResources {
     CACHE = "CACHE"
 }
 
-const connectServerlessCache = async () => {
+export const connectServerlessCache = async () => {
     const endpointAddress = process.env.CACHE_ENDPOINT_ADDRESS
     const endpointPort = process.env.CACHE_ENDPOINT_PORT
     const cacheSecretArn = process.env.CACHE_SECRET_ARN

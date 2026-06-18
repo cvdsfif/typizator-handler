@@ -331,6 +331,10 @@ export type TSApiDatabaseProperties<T extends ApiDefinition> = TSApiProperties<T
      */
     migrationLambda?: string,
     /**
+     * Name of the lambda function that is executed on every deployment
+     */
+    setupLambda?: string,
+    /**
      * Path to the migrtion lambda. Usually the same as for the other lambdas
      */
     migrationLambdaPath?: string,
@@ -992,6 +996,14 @@ export type DependentApiProperties<T extends ApiDefinition> = TSApiProperties<T>
      * Reference of the parent construct to connect to. The construct must connect the API to a database
      */
     parentConstruct: TSApiConstruct<any>
+
+    /**
+     * If false, the dependent construct will not inherit the serverless cache connection data from the parent construct.
+     *
+     * This is useful when the parent stack defines `serverlessCache`, but a specific child stack must not have cache
+     * connection environment variables and secret permissions.
+     */
+    inheritServerlessCache?: boolean
 }
 
 type InnerDependentApiProperties<T extends ApiDefinition> = TSApiProperties<T> & {
@@ -1120,7 +1132,7 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
             insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy,
             corsConfiguration: props.corsConfiguration ?? props.parentConstruct.corsConfiguration,
             bucketVars: props.parentConstruct.bucketVars,
-            serverlessCacheData: props.parentConstruct.serverlessCacheData
+            serverlessCacheData: props.inheritServerlessCache === false ? undefined : props.parentConstruct.serverlessCacheData
         } as InnerDependentApiProperties<T>
         const apiInfo = createHttpApi(this, innerProps, kebabToCamel(innerProps.apiMetadata.path.replace("/", "-")))
         this.httpApi = apiInfo.api
@@ -1489,6 +1501,50 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     this, `MigrationResource-${props.apiName}-${props.deployFor}`, {
                     serviceToken: customResourceProvider.serviceToken,
                     resourceType: "Custom::PostgresDatabaseMigration",
+                    properties: { Checksum: checksum.toString() }
+                })
+                customResource.node.addDependency(this.database!)
+            }
+
+            if (props.connectDatabase && props.setupLambda) {
+                const keyKebabCase = camelToKebab(props.setupLambda)
+                const subPath = props.migrationLambdaPath ?? "";
+                const filePath = `${props.lambdaPath}${subPath}/${keyKebabCase}`
+                const handler = requireHereAndUp(filePath)[props.setupLambda]
+                const resourcesConnected = handler?.connectedResources;
+                const checksum = readFileSync(`${filePath}.ts`)
+                    .reduce((accumulator, sym) => accumulator = (accumulator + BigInt(sym)) % (65536n ** 2n), 0n)
+
+                if (!handler?.isSetupHandler || !resourcesConnected)
+                    throw new Error(`No appropriate setup handler connected for ${filePath}`);
+
+                const setupLambda = createLambda(
+                    {
+                        scope: this,
+                        props: props as any,
+                        subPath,
+                        sharedLayer: this.sharedLayer,
+                        key: props.setupLambda,
+                        filePath,
+                        vpc: this.vpc,
+                        database: this.database,
+                        databaseReadReplica: this.databaseReadReplica,
+                        databaseSG: this.databaseSG,
+                        lambdaSG: this.lambdaSG,
+                        insightsLayer: this.insightsLayer,
+                        insightsLayerPolicy: this.insightsLayerPolicy,
+                        bucketVars,
+                        serverlessCacheData: this.serverlessCacheData,
+                    }
+                )
+                const customResourceProvider = new Provider(
+                    this, `SetupResourceProvider-${props.apiName}-${props.deployFor}`, {
+                    onEventHandler: setupLambda
+                })
+                const customResource = new CustomResource(
+                    this, `SetupResource-${props.apiName}-${props.deployFor}`, {
+                    serviceToken: customResourceProvider.serviceToken,
+                    resourceType: "Custom::GeneralDataSetup",
                     properties: { Checksum: checksum.toString() }
                 })
                 customResource.node.addDependency(this.database!)
