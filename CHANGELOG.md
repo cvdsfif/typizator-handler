@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ## 5.1.0 - 2026-06-18
-
-## 5.0.10 - 2026-06-08
+Setup handler that runs on every deployment and can access database and cache.
+Possibility to disable cache inheritance for dependent stacks.
 
 ## 5.0.9 - 2026-05-31
 Ingress rules for lambdas accessing elasticache
