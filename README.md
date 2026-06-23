@@ -290,7 +290,28 @@ The secret referenced by `CACHE_SECRET_ARN` must contain a JSON payload with the
 - `username`
 - `password`
 
-If you use the `TSApiConstruct`, these variables and the secret permissions are configured automatically when you enable `serverlessCache` on the stack.
+If you use the `TSApiConstruct`, these variables and the secret permissions are configured automatically when you enable a cache on the stack.
+
+#### Cache types
+
+The construct supports two cache deployment options:
+
+```ts
+serverlessCache: {
+    serverlessCacheName: "my-cache"
+}
+```
+
+or
+
+```ts
+provisionedCache: {
+    // Optional, defaults to "cache.t3.medium"
+    cacheNodeType: "cache.t3.medium"
+}
+```
+
+Only one of these options can be used at a time.
 
 ### S3 buckets access injection
 
@@ -737,9 +758,9 @@ export const setup = setupHandler({
 
 #### Accessing the serverless cache from the setup handler
 
-If you enable `serverlessCache` on the stack and declare `ConnectedResources.CACHE` on the setup handler, the construct injects the cache access environment variables and grants permissions to read the cache credentials secret.
+If you enable a cache (`serverlessCache` or `provisionedCache`) on the stack and declare `ConnectedResources.CACHE` on the setup handler, the construct injects the cache access environment variables and grants permissions to read the cache credentials secret.
 
-At runtime, you can use `connectServerlessCache()` to create a Valkey client from the injected configuration.
+At runtime, use `props.cache` (or, in case of `setupHandler()`, the `cache` argument) to access the connected cache client.
 
 ### Splitting stacks
 
@@ -783,9 +804,9 @@ const childConstruct = new DependentApiConstruct(this, "ChildApi", {
 })
 ```
 
-#### Exceptionally not inheriting the parent serverless cache
+#### Exceptionally not inheriting the parent cache
 
-By default, a dependent stack inherits the serverless cache connection data from the parent construct (if the parent stack enabled `serverlessCache`).
+By default, a dependent stack inherits the cache connection data from the parent construct (if the parent stack enabled `serverlessCache` or `provisionedCache`).
 
 If you want a specific dependent stack to not receive the cache connection environment variables and permissions, set `inheritServerlessCache: false`:
 

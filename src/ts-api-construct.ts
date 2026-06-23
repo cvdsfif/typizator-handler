@@ -174,6 +174,11 @@ export type ServerlessCacheProperties = Partial<elasticache.CfnServerlessCachePr
     serverlessCacheName: string,
 }
 
+export type ProvisionedCacheProperties = Partial<elasticache.CfnReplicationGroupProps> & {
+    replicationGroupId?: string,
+    cacheNodeType?: string,
+}
+
 export const normalizeElastiCacheId = (value: string) => {
     const lowered = value.toLowerCase()
     const replaced = lowered.replace(/[^a-z0-9-]/g, "-")
@@ -186,7 +191,7 @@ export const normalizeElastiCacheId = (value: string) => {
 /**
  * Properties defining how the stack is constructed from the `typizator` API definition
  */
-export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
+export type TSApiPropertiesBase<T extends ApiDefinition> = ExtendedStackProps & {
     /**
      * API name (unique for your AWS account)
      */
@@ -294,11 +299,14 @@ export type TSApiProperties<T extends ApiDefinition> = ExtendedStackProps & {
      * Optional map of S3 buckets to create on the stack
      */
     s3Buckets?: S3BucketProperties[],
-    /**
-     * Optional properties for the serverless cache to create
-     */
-    serverlessCache?: ServerlessCacheProperties,
 }
+
+type CacheConfiguration =
+    | { serverlessCache?: undefined; provisionedCache?: undefined }
+    | { serverlessCache: ServerlessCacheProperties; provisionedCache?: undefined }
+    | { provisionedCache: ProvisionedCacheProperties; serverlessCache?: undefined }
+
+export type TSApiProperties<T extends ApiDefinition> = TSApiPropertiesBase<T> & CacheConfiguration
 
 /**
  * Properties for lambdas without database connection
@@ -1114,25 +1122,25 @@ export class DependentApiConstruct<T extends ApiDefinition> extends Construct {
             props.lambdaPropertiesTree
         )
 
+        const { parentConstruct, inheritServerlessCache, ...restProps } = props
         const innerProps = {
-            ...props,
-            parentConstruct: undefined,
+            ...restProps,
             connectDatabase: true,
-            auroraCluster: props.parentConstruct.auroraCluster,
-            database: props.parentConstruct.database,
-            databaseReadReplica: props.parentConstruct.databaseReadReplica,
-            databaseSG: props.parentConstruct.databaseSG,
-            lambdaSG: props.parentConstruct.lambdaSG,
+            auroraCluster: parentConstruct.auroraCluster,
+            database: parentConstruct.database,
+            databaseReadReplica: parentConstruct.databaseReadReplica,
+            databaseSG: parentConstruct.databaseSG,
+            lambdaSG: parentConstruct.lambdaSG,
             dbProps: {
-                databaseName: props.parentConstruct.databaseName
+                databaseName: parentConstruct.databaseName
             },
-            vpc: props.parentConstruct.vpc,
+            vpc: parentConstruct.vpc,
             sharedLayer: this.sharedLayer,
-            insightsLayer: props.parentConstruct.insightsLayer,
-            insightsLayerPolicy: props.parentConstruct.insightsLayerPolicy,
-            corsConfiguration: props.corsConfiguration ?? props.parentConstruct.corsConfiguration,
-            bucketVars: props.parentConstruct.bucketVars,
-            serverlessCacheData: props.inheritServerlessCache === false ? undefined : props.parentConstruct.serverlessCacheData
+            insightsLayer: parentConstruct.insightsLayer,
+            insightsLayerPolicy: parentConstruct.insightsLayerPolicy,
+            corsConfiguration: props.corsConfiguration ?? parentConstruct.corsConfiguration,
+            bucketVars: parentConstruct.bucketVars,
+            serverlessCacheData: inheritServerlessCache === false ? undefined : parentConstruct.serverlessCacheData
         } as InnerDependentApiProperties<T>
         const apiInfo = createHttpApi(this, innerProps, kebabToCamel(innerProps.apiMetadata.path.replace("/", "-")))
         this.httpApi = apiInfo.api
@@ -1340,7 +1348,10 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
         })
 
         this.auroraCluster = props.auroraCluster ?? false
-        if (props.connectDatabase || props.serverlessCache) {
+        if (props.serverlessCache && props.provisionedCache)
+            throw new Error("Only one cache option can be configured: serverlessCache or provisionedCache")
+
+        if (props.connectDatabase || props.serverlessCache || props.provisionedCache) {
             const extraVpcProps = ("vpcProps" in props && props.vpcProps) ? props.vpcProps : undefined
             const vpc: IVpc = this.vpc = new Vpc(this, `VPC-${props.apiName}-${props.deployFor}`, {
                 natGateways: 1,
@@ -1399,6 +1410,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     securityGroupIds: [cacheSG.securityGroupId],
                     subnetIds: subnets.subnetIds,
                     userGroupId: userGroup.ref,
+
                 })
 
                 this.serverlessCacheData = {
@@ -1410,6 +1422,58 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 }
 
                 this.serverlessCache.node.addDependency(userGroup)
+            }
+
+            if (props.provisionedCache) {
+                const cacheProps = props.provisionedCache
+                const engine = cacheProps.engine ?? "valkey"
+                const port = cacheProps.port ?? 6379
+
+                const userName = "default"
+                const userSecret = new Secret(this, `ProvisionedCache-${props.apiName}-${props.deployFor}-authToken`, {
+                    generateSecretString: {
+                        secretStringTemplate: JSON.stringify({ username: userName }),
+                        generateStringKey: "password",
+                        excludePunctuation: true,
+                        passwordLength: 32,
+                        requireEachIncludedType: true,
+                    },
+                })
+
+                const cacheSG = new SecurityGroup(this, `ProvisionedCache-${props.apiName}-${props.deployFor}-sg`, { vpc })
+                cacheSG.addIngressRule(this.lambdaSG!, Port.tcp(port), `Lambda2Cache-${props.apiName}-${props.deployFor}`)
+                const subnets = vpc.selectSubnets({ subnetType: SubnetType.PRIVATE_WITH_EGRESS })
+
+                const subnetGroup = new elasticache.CfnSubnetGroup(this, `ProvisionedCache-${props.apiName}-${props.deployFor}-subnet-group`, {
+                    cacheSubnetGroupName: normalizeElastiCacheId(`cache-subnet-${props.apiName}-${props.deployFor}`),
+                    description: `Cache subnet group for ${props.apiName}-${props.deployFor}`,
+                    subnetIds: subnets.subnetIds,
+                })
+
+                const replicationGroupId = normalizeElastiCacheId(cacheProps.replicationGroupId ?? `cache-${props.apiName}-${props.deployFor}`)
+                const replicationGroup = new elasticache.CfnReplicationGroup(this, `ProvisionedCache-${props.apiName}-${props.deployFor}`, {
+                    ...cacheProps,
+                    replicationGroupId,
+                    replicationGroupDescription: cacheProps.replicationGroupDescription ?? `Cache for ${props.apiName}-${props.deployFor}`,
+                    cacheNodeType: cacheProps.cacheNodeType ?? "cache.t3.medium",
+                    engine,
+                    port,
+                    authToken: userSecret.secretValueFromJson("password").unsafeUnwrap(),
+                    transitEncryptionEnabled: cacheProps.transitEncryptionEnabled ?? true,
+                    atRestEncryptionEnabled: cacheProps.atRestEncryptionEnabled ?? true,
+                    cacheSubnetGroupName: subnetGroup.cacheSubnetGroupName!,
+                    securityGroupIds: [cacheSG.securityGroupId],
+                })
+
+                this.serverlessCacheData = {
+                    secretArn: userSecret.secretArn,
+                    secret: userSecret,
+                    username: userName,
+                    endpointAddress: replicationGroup.attrPrimaryEndPointAddress,
+                    endpointPort: replicationGroup.attrPrimaryEndPointPort,
+                }
+
+                replicationGroup.node.addDependency(subnetGroup)
             }
 
             if (props.connectDatabase && isAuroraCluster(props)) {

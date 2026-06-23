@@ -2,7 +2,7 @@ import { App, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import { ApiDefinition } from "typizator";
 import { ExtendedStackProps, TSApiConstruct, TSApiDatabaseProperties, TSApiPlainProperties } from "../src/ts-api-construct";
-import { Match, Matcher, Template } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { connectedApi } from "./lambda/shared/connected-api-definition";
 import { extendExpectWithToContainStrings } from "./util/expect-contain-strings";
 
@@ -166,6 +166,79 @@ describe("Testing a stack with connected database", () => {
         const resourceKeys = Object.keys(customResource)
         expect(resourceKeys.length).toEqual(1)
         expect(customResource[resourceKeys[0]].Properties.Checksum.length).toBeGreaterThan(0)
+    })
+
+    test("Should create a provisioned cache when provisionedCache is set", () => {
+        const app = new App()
+
+        const stack = new TestStack(
+            app, "TestedStack", props,
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: connectedApi.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: true,
+                provisionedCache: {
+                },
+                dbProps: {
+                    databaseName: "TestDatabase"
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                }
+            } as any
+        )
+        const template = Template.fromStack(stack)
+        template.resourceCountIs("AWS::ElastiCache::ReplicationGroup", 1)
+        template.hasResourceProperties("AWS::ElastiCache::ReplicationGroup",
+            Match.objectLike({
+                CacheNodeType: "cache.t3.medium"
+            })
+        )
+    })
+
+    test("Should throw if both serverlessCache and provisionedCache are set", () => {
+        const app = new App()
+
+        expect(() =>
+            new TestStack(
+                app, "TestedStack", props,
+                {
+                    ...props,
+                    apiName: "TSTestApi",
+                    description: "Test Typescript API",
+                    apiMetadata: connectedApi.metadata,
+                    lambdaPath: "tests/lambda",
+                    connectDatabase: true,
+                    serverlessCache: {
+                        serverlessCacheName: "test-cache"
+                    },
+                    provisionedCache: {
+                        cacheNodeType: "cache.t3.medium",
+                    },
+                    dbProps: {
+                        databaseName: "TestDatabase"
+                    },
+                    extraBundling: {
+                        minify: true,
+                        sourceMap: false,
+                        externalModules: [
+                            "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        ]
+                    }
+                } as any
+            )
+        ).toThrow("Only one cache option can be configured")
     })
 
     test("Should fail if the setup lambda is not found", async () => {
