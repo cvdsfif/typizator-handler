@@ -1438,6 +1438,11 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 const engine = cacheProps.engine ?? "valkey"
                 const port = cacheProps.port ?? 6379
 
+                const shouldDefaultNumCacheClusters =
+                    cacheProps.numCacheClusters === undefined &&
+                    cacheProps.numNodeGroups === undefined &&
+                    cacheProps.replicasPerNodeGroup === undefined
+
                 const userName = "default"
                 const userSecret = new Secret(this, `ProvisionedCache-${props.apiName}-${props.deployFor}-authToken`, {
                     generateSecretString: {
@@ -1464,6 +1469,7 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     ...cacheProps,
                     replicationGroupId,
                     replicationGroupDescription: cacheProps.replicationGroupDescription ?? `Cache for ${props.apiName}-${props.deployFor}`,
+                    ...(shouldDefaultNumCacheClusters ? { numCacheClusters: 1 } : {}),
                     cacheNodeType: cacheProps.cacheNodeType ?? "cache.t3.medium",
                     engine,
                     port,
