@@ -107,7 +107,7 @@ Note that in your implementations you still have the access to the original even
 The simplest choice for that would be to connect the Insights extension to your lambda. It is connected through the `insightsLayer` property of the construct. However, it is not free, it has a usage cost on AWS. Instead, you can create an empty extension and add it to your shared layer. Simply create a `logger.ts` file in your shared layer's directory with the following content:
 
 ```ts
-import { ExtensionAPIService, EventTypes } from "lambda-extension-service";
+import { ExtensionAPIService, EventTypes } from "lambda-extension-service"
 
 const main = async () => {
     const extensionApiService = new ExtensionAPIService({
@@ -583,8 +583,8 @@ In each of those files, we must export an implementing function with the same na
 
 ```ts
 // hello-world.ts
-import { handlerImpl } from "typizator-handler";
-import { api } from "........";
+import { handlerImpl } from "typizator-handler"
+import { api } from "........"
 
 export const helloWorldImpl = async (arg: string) : Promise<string> => {
     // Your implementation here
@@ -602,8 +602,8 @@ export const helloWorld = handlerImpl(
 
 ```ts
 // sub-group/report.ts
-import { handlerImpl } from "typizator-handler";
-import { api } from "........";
+import { handlerImpl } from "typizator-handler"
+import { api } from "........"
 
 export const reportImpl = async () : Promise<void> => {
     // Your implementation here
@@ -651,8 +651,8 @@ You'll have to slightly change your handlers:
 
 ```ts
 // hello-world.ts
-import { HandlerProps, connectedHandlerImpl } from "typizator-handler";
-import { api } from "........";
+import { HandlerProps, connectedHandlerImpl } from "typizator-handler"
+import { api } from "........"
 
 // When you use connectedHandlerImpl, the extra first parameter of the implementation becomes props, that contains the connected database object
 export const helloWorldImpl = async (props: HandlerProps, arg: string) : Promise<string> => {
@@ -982,7 +982,7 @@ I recommend to use the `@testcontainers/postgresql` library to set up database-c
 
 ```ts 
 export const setupTestConnection = (runFirst = async (_: DatabaseConnection) => { }) => {
-    jest.setTimeout(60000);
+    jest.setTimeout(60000)
     const setup = {
         connection: null as (DatabaseConnection | null)
     }
@@ -1005,7 +1005,7 @@ We never test the framework. So once your construct configured, you can consider
 
 ```ts
 test("The template should sythetize properly", () => {
-    const app = new App();
+    const app = new App()
     const stack = new YourStackName(app, "UniqueStackId", {
         deployFor: "test"
     })
@@ -1021,18 +1021,18 @@ After that, individually test the implementations of your components. You don't 
 My recommendation for the connected lambdas is to use a local Postgres instance, as explained in the documentation of [typizator-handler](https://www.npmjs.com/package/typizator-handler) and execute your migration every time you run your tests, this usually doesn't take a lot of time on the empty database. Use something like that to set up the connection:
 
 ```ts
-import { PostgreSqlContainer } from "@testcontainers/postgresql";
-import { MigrationResultFailure, MigrationResultSuccess, PostgresListMigrationProcessor } from "cdk-typescript-lib";
-import { Client } from "pg";
-import { DatabaseConnection, connectDatabase } from "typizator-handler";
-import { migrations } from "<Path to your migration lambda>";
+import { PostgreSqlContainer } from "@testcontainers/postgresql"
+import { MigrationResultFailure, MigrationResultSuccess, PostgresListMigrationProcessor } from "cdk-typescript-lib"
+import { Client } from "pg"
+import { DatabaseConnection, connectDatabase } from "typizator-handler"
+import { migrations } from "<Path to your migration lambda>"
 
 const isMigrationResultFailure = (
     arg: MigrationResultSuccess | MigrationResultFailure
 ): arg is MigrationResultFailure => !((arg as MigrationResultFailure).successful)
 
 export const setupTestConnection = (runFirst = async (_: DatabaseConnection) => { }) => {
-    jest.setTimeout(60000);
+    jest.setTimeout(60000)
     const setup = {
         connection: null as (DatabaseConnection | null)
     }
@@ -1097,7 +1097,7 @@ export default async function setup() {
 ```ts
 // globalTeardown.ts
 
-import { DatabaseConnection } from "typizator-handler";
+import { DatabaseConnection } from "typizator-handler"
 
 export default async function teardown() {
     await ((globalThis as any).connection as DatabaseConnection).client.end()

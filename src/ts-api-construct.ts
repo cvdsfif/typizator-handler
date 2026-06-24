@@ -304,6 +304,8 @@ export type TSApiPropertiesBase<T extends ApiDefinition> = ExtendedStackProps & 
      * If true, there will be no deployment-time exception if the resource you try to connect to a lambda is not provided by the stack
      */
     ignoreConnectedResourcesErrors?: boolean,
+
+    createLogGroups?: boolean,
 }
 
 type CacheConfiguration =
@@ -617,11 +619,11 @@ const createTelegrafSetupLambda = <R extends ApiDefinition>(
     const camelCasePath = kebabToCamel(filePath.replace("/", "-"))
     const tgSetupSuffix = "-tg-setup"
 
-    const logGroup = new LogGroup(scope, `TSApiLambdaLog-${camelCasePath}${tgSetupSuffix}${props.deployFor}`, {
+    const logGroup = props.createLogGroups ? new LogGroup(scope, `TSApiLambdaLog-${camelCasePath}${tgSetupSuffix}${props.deployFor}`, {
         removalPolicy: RemovalPolicy.DESTROY,
         retention: RetentionDays.THREE_DAYS,
         ...props.logGroupProps
-    })
+    }) : undefined
 
     let lambdaProperties = {
         code: new InlineCode(`
@@ -634,7 +636,7 @@ const createTelegrafSetupLambda = <R extends ApiDefinition>(
         memorySize: 128,
         architecture: DEFAULT_ARCHITECTURE,
         timeout: Duration.seconds(30),
-        logGroup,
+        ...(logGroup ? { logGroup } : {}),
         layers: [sharedLayer, ...(props.extraLayers ?? [])],
         ...props.lambdaProps,
         environment: {
@@ -721,12 +723,12 @@ const createLambda = <R extends ApiDefinition>(
 
     const camelCasePath = kebabToCamel(filePath.replace("/", "-"))
 
-    const logGroup = new LogGroup(scope, `TSApiLambdaLog-${camelCasePath}${props.deployFor}`, {
+    const logGroup = props.createLogGroups ? new LogGroup(scope, `TSApiLambdaLog-${camelCasePath}${props.deployFor}`, {
         removalPolicy: RemovalPolicy.DESTROY,
         retention: RetentionDays.THREE_DAYS,
         ...props.logGroupProps,
         ...specificLambdaProperties?.logGroupProps
-    })
+    }) : undefined
 
     let lambdaProperties = {
         entry: `${filePath}.ts`,
@@ -736,7 +738,7 @@ const createLambda = <R extends ApiDefinition>(
         memorySize: 256,
         architecture: DEFAULT_ARCHITECTURE,
         timeout: Duration.seconds(60),
-        logGroup,
+        ...(logGroup ? { logGroup } : {}),
         layers: [
             sharedLayer,
             ...(insightsLayer ? [insightsLayer] : []),

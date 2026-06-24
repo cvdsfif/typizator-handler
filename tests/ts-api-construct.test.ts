@@ -87,7 +87,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             authorizedIps: ["10.0.0.1"],
                             accessMask: 0b1000,
                             nodejsFunctionProps: {
-                                runtime: Runtime.NODEJS_18_X
+                                runtime: Runtime.NODEJS_22_X
                             },
                             logGroupProps: {
                                 removalPolicy: RemovalPolicy.SNAPSHOT
@@ -312,7 +312,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                             authorizedIps: ["10.0.0.1"],
                             accessMask: 0b1000,
                             nodejsFunctionProps: {
-                                runtime: Runtime.NODEJS_18_X
+                                runtime: Runtime.NODEJS_22_X
                             },
                             logGroupProps: {
                                 removalPolicy: RemovalPolicy.SNAPSHOT
@@ -341,18 +341,11 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                 "Architectures": ["arm64"],
                 "MemorySize": 256,
                 "Runtime": "nodejs22.x",
-                "Timeout": 60,
-                "LoggingConfig": {
-                    "LogGroup": { "Ref": Match.stringLikeRegexp("Meow") }
-                }
+                "Timeout": 60
             })
         );
 
-        let allLogGroups = template.findResources("AWS::Logs::LogGroup", Match.anyValue())
-        let helloWorldLogGroupKey = Object.keys(allLogGroups).find(key => key.includes("HelloWorld"));
-        expect(allLogGroups[helloWorldLogGroupKey!].DeletionPolicy).toEqual("Delete")
-        const noMeowLogGroupKey = Object.keys(allLogGroups).find(key => key.includes("NoMeow"));
-        expect(allLogGroups[noMeowLogGroupKey!].DeletionPolicy).toEqual("Snapshot")
+        template.resourceCountIs("AWS::Logs::LogGroup", 0)
 
         // Create a separate stack with updated Lambda config
         const app = new App()
@@ -367,8 +360,9 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                     apiMetadata: simpleApiS.metadata,
                     lambdaPath: "tests/lambda",
                     corsConfiguration: { allowMethods: [CorsHttpMethod.POST], allowHeaders: ["*"], allowOrigins: ["https://ori.gin"] },
+                    createLogGroups: true,
                     lambdaProps: {
-                        runtime: Runtime.NODEJS_18_X,
+                        runtime: Runtime.NODEJS_22_X,
                         architecture: Architecture.ARM_64
                     },
                     logGroupProps: {
@@ -391,7 +385,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         template.hasResourceProperties("AWS::Lambda::Function",
             Match.objectLike({
                 "Description": "Test Typescript API - /meow (staging)",
-                "Runtime": "nodejs18.x",
+                "Runtime": "nodejs22.x",
                 "LoggingConfig": {
                     "LogGroup": { "Ref": Match.stringLikeRegexp("Meow") }
                 }
@@ -401,8 +395,8 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
             "Name": "ProxyCorsHttpApi-TSTestApi-staging",
             "CorsConfiguration": { "AllowMethods": ["POST"], "AllowOrigins": ['https://ori.gin'], "AllowHeaders": ['*'] }
         })
-        allLogGroups = template.findResources("AWS::Logs::LogGroup", Match.anyValue())
-        helloWorldLogGroupKey = Object.keys(allLogGroups).find(key => key.includes("HelloWorld"));
+        let allLogGroups = template.findResources("AWS::Logs::LogGroup", Match.anyValue())
+        let helloWorldLogGroupKey = Object.keys(allLogGroups).find(key => key.includes("HelloWorld"));
         expect(allLogGroups[helloWorldLogGroupKey!].DeletionPolicy).toEqual("Retain")
     })
 
@@ -423,7 +417,7 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
         );
         template.hasResourceProperties("AWS::Lambda::LayerVersion",
             Match.objectLike({
-                "CompatibleRuntimes": Match.arrayWith(["nodejs22.x", "nodejs18.x", "nodejs20.x"])
+                "CompatibleRuntimes": Match.arrayWith(["nodejs22.x", "nodejs20.x"])
             })
         );
     });
@@ -442,6 +436,64 @@ describe("Testing the behaviour of the Typescript API construct for CDK", () => 
                 })]
             })
         )
+    })
+
+    test("Should wire telegraf setup lambda log group when createLogGroups is true", () => {
+        const app = new App();
+        const props = { deployFor: "test" }
+        const stack = new TestStack(
+            app, "TestedStackWithTelegrafLogGroups", props,
+            (stack: Stack) => {
+                const secret = new Secret(stack, "TestSecret")
+                const injectedSecret = new Secret(stack, "InjectedSecret")
+                const telegrafSecret = new Secret(stack, "TelegrafSecret")
+                return new TSApiConstruct(stack, "SimpleApi", {
+                    ...props,
+                    apiName: "TSTestApi",
+                    description: "Test Typescript API",
+                    apiMetadata: simpleApiWithFirebaseS.metadata,
+                    lambdaPath: "tests/lambda",
+                    connectDatabase: false,
+                    createLogGroups: true,
+                    secrets: [injectedSecret],
+                    firebaseAdminConnect: {
+                        secret,
+                        internalDatabaseName: "db"
+                    },
+                    extraBundling: {
+                        minify: true,
+                        sourceMap: false,
+                        externalModules: [
+                            "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                            "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                            "serverless-postgres", "iovalkey", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                        ]
+                    },
+                    lambdaPropertiesTree: {
+                        telegrafInline: {
+                            telegrafSecret
+                        },
+                        telegrafConnected: {
+                            telegrafSecret
+                        }
+                    }
+                })
+            }
+        )
+
+        const telegrafTemplate = Template.fromStack(stack)
+        const allLambdas = telegrafTemplate.findResources("AWS::Lambda::Function")
+        const telegrafSetupLambdaKey = Object.keys(allLambdas).find((key) => {
+            const props = allLambdas[key]?.Properties
+            if (!props) return false
+            if (props.Handler !== "index.handler") return false
+
+            const vars = props.Environment?.Variables
+            return !!vars?.TELEGRAF_SECRET_ARN && !!vars?.TELEGRAF_API_URL
+        })
+        expect(telegrafSetupLambdaKey).toBeDefined()
+        const telegrafSetupLambda = allLambdas[telegrafSetupLambdaKey!]
+        expect(telegrafSetupLambda.Properties.LoggingConfig.LogGroup).toBeDefined()
     })
 
     test("Should create serverless cache with default engine/version", () => {

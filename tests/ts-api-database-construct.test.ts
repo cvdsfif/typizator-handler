@@ -133,6 +133,67 @@ describe("Testing a stack with connected database", () => {
         expect(customResource[resourceKeys[0]].Properties.Checksum.length).toBeGreaterThan(0)
     })
 
+    test("Should not create per-lambda log groups by default", () => {
+        const app = new App();
+
+        const stack = new TestStack(
+            app, "TestedStack", props,
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: connectedApi.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: true,
+                dbProps: {
+                    databaseName: "TestDatabase"
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                }
+            }
+        )
+        const template = Template.fromStack(stack)
+        template.resourceCountIs("AWS::Logs::LogGroup", 0)
+    })
+
+    test("Should create per-lambda log groups when createLogGroups is true", () => {
+        const app = new App();
+
+        const stack = new TestStack(
+            app, "TestedStack", props,
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: connectedApi.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: true,
+                createLogGroups: true,
+                dbProps: {
+                    databaseName: "TestDatabase"
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                }
+            }
+        )
+        const template = Template.fromStack(stack)
+        template.resourceCountIs("AWS::Logs::LogGroup", 1)
+    })
+
     test("Should connect the setup custom resource", () => {
         const app = new App()
 
@@ -328,7 +389,7 @@ describe("Testing a stack with connected database", () => {
                     ]
                 }
             }
-        );
+        )
         const template = Template.fromStack(stack)
 
         const app2 = new App()
