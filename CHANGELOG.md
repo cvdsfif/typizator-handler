@@ -5,6 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+Number of cache clusters for provisioned instances now defaults to 2 when automaticFailoverEnabled or multiAzEnabled is true.
 
 ## 5.1.4 - 2026-06-24
 Number of cache clusters for provisioned instances is now configurable and defaults to 1.

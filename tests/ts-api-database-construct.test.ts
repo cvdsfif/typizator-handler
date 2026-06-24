@@ -303,6 +303,44 @@ describe("Testing a stack with connected database", () => {
         )
     })
 
+    test("Should default to 2 cache clusters when automaticFailoverEnabled is true", () => {
+        const app = new App()
+
+        const stack = new TestStack(
+            app, "TestedStack", props,
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: connectedApi.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: true,
+                provisionedCache: {
+                    automaticFailoverEnabled: true,
+                },
+                dbProps: {
+                    databaseName: "TestDatabase"
+                },
+                extraBundling: {
+                    minify: true,
+                    sourceMap: false,
+                    externalModules: [
+                        "json-bigint", "typizator", "typizator-handler", "@aws-sdk/client-secrets-manager", "pg", "crypto",
+                        "aws-cdk-lib", "constructs", "ulid", "firebase-admin", "luxon", "jsonwebtoken",
+                        "serverless-postgres", "lambda-extension-service", "@aws-sdk/client-ses", "@aws-sdk/client-s3"
+                    ]
+                }
+            } as any
+        )
+        const template = Template.fromStack(stack)
+        template.hasResourceProperties("AWS::ElastiCache::ReplicationGroup",
+            Match.objectLike({
+                AutomaticFailoverEnabled: true,
+                NumCacheClusters: 2,
+            })
+        )
+    })
+
     test("Should throw if both serverlessCache and provisionedCache are set", () => {
         const app = new App()
 

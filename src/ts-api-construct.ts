@@ -1438,10 +1438,16 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                 const engine = cacheProps.engine ?? "valkey"
                 const port = cacheProps.port ?? 6379
 
+                const automaticFailoverEnabled = cacheProps.automaticFailoverEnabled ?? false
+                const multiAzEnabled = cacheProps.multiAzEnabled ?? false
+
                 const shouldDefaultNumCacheClusters =
                     cacheProps.numCacheClusters === undefined &&
                     cacheProps.numNodeGroups === undefined &&
                     cacheProps.replicasPerNodeGroup === undefined
+
+                const defaultNumCacheClusters =
+                    (automaticFailoverEnabled === true || multiAzEnabled === true) ? 2 : 1
 
                 const userName = "default"
                 const userSecret = new Secret(this, `ProvisionedCache-${props.apiName}-${props.deployFor}-authToken`, {
@@ -1469,11 +1475,13 @@ export class TSApiConstruct<T extends ApiDefinition> extends Construct {
                     ...cacheProps,
                     replicationGroupId,
                     replicationGroupDescription: cacheProps.replicationGroupDescription ?? `Cache for ${props.apiName}-${props.deployFor}`,
-                    ...(shouldDefaultNumCacheClusters ? { numCacheClusters: 1 } : {}),
+                    ...(shouldDefaultNumCacheClusters ? { numCacheClusters: defaultNumCacheClusters } : {}),
                     cacheNodeType: cacheProps.cacheNodeType ?? "cache.t3.medium",
                     engine,
                     port,
                     authToken: userSecret.secretValueFromJson("password").unsafeUnwrap(),
+                    automaticFailoverEnabled,
+                    multiAzEnabled,
                     transitEncryptionEnabled: cacheProps.transitEncryptionEnabled ?? true,
                     atRestEncryptionEnabled: cacheProps.atRestEncryptionEnabled ?? true,
                     cacheSubnetGroupName: subnetGroup.cacheSubnetGroupName!,
