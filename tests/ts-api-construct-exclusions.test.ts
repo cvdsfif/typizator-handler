@@ -5,6 +5,7 @@ import { DependentApiProperties, DependentApiConstruct, ExtendedStackProps, TSAp
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { simpleApiS } from "./lambda/shared/simple-api-definition";
 import { CorsHttpMethod } from "aws-cdk-lib/aws-apigatewayv2";
+import { simpleApiWithCacheS } from "./lambda/shared/cache-api-definition";
 
 describe("Testing partial exclusions on the API", () => {
     class TestStack<T extends ApiDefinition> extends Stack {
@@ -323,6 +324,42 @@ describe("Testing partial exclusions on the API", () => {
                 })
             )
         )
+    })
+
+    test("Should allow ignoring connected resources validation errors", () => {
+        const app = new App()
+        const props = { deployFor: "test" }
+
+        expect(() =>
+            new TSApiConstruct(
+                new Stack(app, "ShouldThrow"),
+                "SimpleApi",
+                {
+                    ...props,
+                    apiName: "TSTestApi",
+                    description: "Test Typescript API",
+                    apiMetadata: simpleApiWithCacheS.metadata,
+                    lambdaPath: "tests/lambda",
+                    connectDatabase: false,
+                }
+            )
+        ).toThrow("Trying to connect cache")
+
+        const stack = new Stack(app, "ShouldNotThrow")
+        new TSApiConstruct(
+            stack,
+            "SimpleApi",
+            {
+                ...props,
+                apiName: "TSTestApi",
+                description: "Test Typescript API",
+                apiMetadata: simpleApiWithCacheS.metadata,
+                lambdaPath: "tests/lambda",
+                connectDatabase: false,
+                ignoreConnectedResourcesErrors: true,
+            }
+        )
+        Template.fromStack(stack)
     })
 
     test("Dependent stack constructs and takes resources from the main one with separate HTTP api", async () => {

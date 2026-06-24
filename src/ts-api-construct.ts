@@ -299,6 +299,11 @@ export type TSApiPropertiesBase<T extends ApiDefinition> = ExtendedStackProps & 
      * Optional map of S3 buckets to create on the stack
      */
     s3Buckets?: S3BucketProperties[],
+
+    /**
+     * If true, there will be no deployment-time exception if the resource you try to connect to a lambda is not provided by the stack
+     */
+    ignoreConnectedResourcesErrors?: boolean,
 }
 
 type CacheConfiguration =
@@ -691,24 +696,26 @@ const createLambda = <R extends ApiDefinition>(
         const resourcesConnected = handler?.connectedResources
         if (!resourcesConnected) throw new Error(`No appropriate handler connected for ${filePath}`)
         const connectedResourcesArray = Array.from(resourcesConnected)
-        if (!props.connectDatabase && connectedResourcesArray.includes(ConnectedResources.DATABASE.toString()))
-            throw new Error(`Trying to connect database to a lambda on a non-connected stack in ${filePath}`)
+        if (!props.ignoreConnectedResourcesErrors) {
+            if (!props.connectDatabase && connectedResourcesArray.includes(ConnectedResources.DATABASE.toString()))
+                throw new Error(`Trying to connect database to a lambda on a non-connected stack in ${filePath}`)
 
-        const connectFirebase = connectedResourcesArray.includes(ConnectedResources.FIREBASE_ADMIN.toString())
-        if (!props.firebaseAdminConnect && connectFirebase)
-            throw new Error(`Trying to connect firebase admin to a lambda on a non-connected stack in ${filePath}`)
+            const connectFirebase = connectedResourcesArray.includes(ConnectedResources.FIREBASE_ADMIN.toString())
+            if (!props.firebaseAdminConnect && connectFirebase)
+                throw new Error(`Trying to connect firebase admin to a lambda on a non-connected stack in ${filePath}`)
 
-        const connectedSecrets = connectedResourcesArray.includes(ConnectedResources.SECRETS.toString())
-        if (!props.secrets && connectedSecrets)
-            throw new Error(`Trying to inject secrets on a stack without secrets`);
+            const connectedSecrets = connectedResourcesArray.includes(ConnectedResources.SECRETS.toString())
+            if (!props.secrets && connectedSecrets)
+                throw new Error(`Trying to inject secrets on a stack without secrets`);
 
-        const connectedTelegraf = connectedResourcesArray.includes(ConnectedResources.TELEGRAF.toString())
-        if (!specificLambdaProperties?.telegrafSecret && connectedTelegraf)
-            throw new Error(`Trying to connect telegraf to a lambda on a non-connected stack in ${filePath}`)
+            const connectedTelegraf = connectedResourcesArray.includes(ConnectedResources.TELEGRAF.toString())
+            if (!specificLambdaProperties?.telegrafSecret && connectedTelegraf)
+                throw new Error(`Trying to connect telegraf to a lambda on a non-connected stack in ${filePath}`)
 
-        const connectedCache = connectedResourcesArray.includes(ConnectedResources.CACHE.toString())
-        if (!props.serverlessCache && !serverlessCacheData && connectedCache)
-            throw new Error(`Trying to connect cache to a lambda on a stack without serverless cache in ${filePath}`)
+            const connectedCache = connectedResourcesArray.includes(ConnectedResources.CACHE.toString())
+            if (!props.serverlessCache && !serverlessCacheData && connectedCache)
+                throw new Error(`Trying to connect cache to a lambda on a stack without serverless cache in ${filePath}`)
+        }
     }
 
 

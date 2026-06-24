@@ -966,6 +966,16 @@ export const handler = async (props: HandlerProps) => {
 
 If you want to return the result of the handler's implementation directly to the client without any additional processing, you can set the `directReturn` property to `true` in the `lambdaConnector` used to connect the lambda function.
 
+#### Ignoring deployment-time connected resources validation
+
+By default, when the construct preloads your handler file, it checks that every resource requested by the handler (database, cache, telegraf, secrets, etc.) is actually configured on the stack. If not, it throws an error like `Trying to connect ... on a non-connected stack` during synth/deployment.
+
+If you need to force the stack to deploy even when a handler requests a resource that is not configured, set:
+
+```ts
+ignoreConnectedResourcesErrors: true
+```
+
 ## Tests
 
 I recommend to use the `@testcontainers/postgresql` library to set up database-connected tests in a real environment. To accelerate test suites execution, I recommend to use the jest's `--runInBand` option and set up your tests suites similar to that:
